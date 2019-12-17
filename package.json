@@ -4,8 +4,7 @@
   "description": "Handshake CUDA miner",
   "keywords": [
     "crypto",
-    "hash",
-    "siphash"
+    "hash"
   ],
   "license": "MIT",
   "repository": "git://github.com/handshake-org/hs-miner.git",
@@ -20,12 +19,8 @@
     "hs-mine": "./bin/hs-mine"
   },
   "scripts": {
-    "install": "./scripts/rebuild testnet",
-    "install-main": "./scripts/rebuild main",
-    "install-testnet": "./scripts/rebuild testnet",
-    "install-regtest": "./scripts/rebuild regtest",
-    "install-simnet": "./scripts/rebuild simnet",
-    "clean": "./scripts/clean",
+    "install": "",
+    "clean": "",
     "lint": "eslint bin/* lib/*.js test/*.js || exit 0",
     "test": "bmocha --reporter spec test/*-test.js"
   },
