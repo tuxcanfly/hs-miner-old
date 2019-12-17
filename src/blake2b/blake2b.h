@@ -16,41 +16,41 @@
  * https://blake2.net.
  */
 
-#ifndef _BCRYPTO_BLAKE2B_H
-#define _BCRYPTO_BLAKE2B_H
+#ifndef _HS_BLAKE2B_H
+#define _HS_BLAKE2B_H
 
 #include <stddef.h>
 #include <stdint.h>
 
 #if defined(_MSC_VER)
-#define BCRYPTO_BLAKE2B_PACKED(x) __pragma(pack(push, 1)) x __pragma(pack(pop))
+#define HS_BLAKE2B_PACKED(x) __pragma(pack(push, 1)) x __pragma(pack(pop))
 #else
-#define BCRYPTO_BLAKE2B_PACKED(x) x __attribute__((packed))
+#define HS_BLAKE2B_PACKED(x) x __attribute__((packed))
 #endif
 
 #if defined(__cplusplus)
 extern "C" {
 #endif
 
-enum bcrypto_blake2b_constant {
-  BCRYPTO_BLAKE2B_BLOCKBYTES = 128,
-  BCRYPTO_BLAKE2B_OUTBYTES = 64,
-  BCRYPTO_BLAKE2B_KEYBYTES = 64,
-  BCRYPTO_BLAKE2B_SALTBYTES = 16,
-  BCRYPTO_BLAKE2B_PERSONALBYTES = 16
+enum hs_blake2b_constant {
+  HS_BLAKE2B_BLOCKBYTES = 128,
+  HS_BLAKE2B_OUTBYTES = 64,
+  HS_BLAKE2B_KEYBYTES = 64,
+  HS_BLAKE2B_SALTBYTES = 16,
+  HS_BLAKE2B_PERSONALBYTES = 16
 };
 
-typedef struct bcrypto_blake2b_ctx__ {
+typedef struct hs_blake2b_ctx__ {
   uint64_t h[8];
   uint64_t t[2];
   uint64_t f[2];
-  uint8_t buf[BCRYPTO_BLAKE2B_BLOCKBYTES];
+  uint8_t buf[HS_BLAKE2B_BLOCKBYTES];
   size_t buflen;
   size_t outlen;
   uint8_t last_node;
-} bcrypto_blake2b_ctx;
+} hs_blake2b_ctx;
 
-BCRYPTO_BLAKE2B_PACKED(struct bcrypto_blake2b_param__ {
+HS_BLAKE2B_PACKED(struct hs_blake2b_param__ {
   uint8_t digest_length;
   uint8_t key_length;
   uint8_t fanout;
@@ -61,40 +61,40 @@ BCRYPTO_BLAKE2B_PACKED(struct bcrypto_blake2b_param__ {
   uint8_t node_depth;
   uint8_t inner_length;
   uint8_t reserved[14];
-  uint8_t salt[BCRYPTO_BLAKE2B_SALTBYTES];
-  uint8_t personal[BCRYPTO_BLAKE2B_PERSONALBYTES];
+  uint8_t salt[HS_BLAKE2B_SALTBYTES];
+  uint8_t personal[HS_BLAKE2B_PERSONALBYTES];
 });
 
-typedef struct bcrypto_blake2b_param__ bcrypto_blake2b_param;
+typedef struct hs_blake2b_param__ bcrypto_blake2b_param;
 
 enum {
-  BCRYPTO_BLAKE2B_DUMMY =
-    1 / (sizeof(bcrypto_blake2b_param) == BCRYPTO_BLAKE2B_OUTBYTES)
+  HS_BLAKE2B_DUMMY =
+    1 / (sizeof(hs_blake2b_param) == HS_BLAKE2B_OUTBYTES)
 };
 
-int bcrypto_blake2b_init(bcrypto_blake2b_ctx *ctx, size_t outlen);
+int hs_blake2b_init(bcrypto_blake2b_ctx *ctx, size_t outlen);
 
-int bcrypto_blake2b_init_key(
-  bcrypto_blake2b_ctx *ctx,
+int hs_blake2b_init_key(
+  hs_blake2b_ctx *ctx,
   size_t outlen,
   const void *key,
   size_t keylen
 );
 
 int
-bcrypto_blake2b_init_param(
-  bcrypto_blake2b_ctx *ctx,
-  const bcrypto_blake2b_param *P
+hs_blake2b_init_param(
+  hs_blake2b_ctx *ctx,
+  const hs_blake2b_param *P
 );
 
 int
-bcrypto_blake2b_update(bcrypto_blake2b_ctx *ctx, const void *in, size_t inlen);
+hs_blake2b_update(bcrypto_blake2b_ctx *ctx, const void *in, size_t inlen);
 
 int
-bcrypto_blake2b_final(bcrypto_blake2b_ctx *ctx, void *out, size_t outlen);
+hs_blake2b_final(bcrypto_blake2b_ctx *ctx, void *out, size_t outlen);
 
 int
-bcrypto_blake2b(
+hs_blake2b(
   void *out,
   size_t outlen,
   const void *in,

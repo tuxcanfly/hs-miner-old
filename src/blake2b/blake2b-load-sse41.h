@@ -12,8 +12,8 @@
    More information about the BLAKE2 hash function can be found at
    https://blake2.net.
 */
-#ifndef BCRYPTO_BLAKE2B_LOAD_SSE41_H
-#define BCRYPTO_BLAKE2B_LOAD_SSE41_H
+#ifndef HS_BLAKE2B_LOAD_SSE41_H
+#define HS_BLAKE2B_LOAD_SSE41_H
 
 #define LOAD_MSG_0_1(b0, b1) \
 do \

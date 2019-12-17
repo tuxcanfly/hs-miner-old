@@ -23,7 +23,7 @@
 #include "blake2b.h"
 #include "blake2b-impl.h"
 
-#ifdef BCRYPTO_USE_SSE
+#ifdef HS_USE_SSE
 #include "blake2b-config.h"
 
 #ifdef HAVE_SSE2
@@ -45,17 +45,17 @@
 #endif
 #include "blake2b-round.h"
 #endif /* HAVE_SSE2 */
-#endif /* BCRYPTO_USE_SSE */
+#endif /* HS_USE_SSE */
 
-static const uint64_t bcrypto_blake2b_IV[8] = {
+static const uint64_t hs_blake2b_IV[8] = {
   0x6a09e667f3bcc908ULL, 0xbb67ae8584caa73bULL,
   0x3c6ef372fe94f82bULL, 0xa54ff53a5f1d36f1ULL,
   0x510e527fade682d1ULL, 0x9b05688c2b3e6c1fULL,
   0x1f83d9abfb41bd6bULL, 0x5be0cd19137e2179ULL
 };
 
-#if !defined(BCRYPTO_USE_SSE) || !defined(HAVE_SSE2)
-static const uint8_t bcrypto_blake2b_sigma[12][16] = {
+#if !defined(HS_USE_SSE) || !defined(HAVE_SSE2)
+static const uint8_t hs_blake2b_sigma[12][16] = {
   {  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15 },
   { 14, 10,  4,  8,  9, 15, 13,  6,  1, 12,  0,  2, 11,  7,  5,  3 },
   { 11,  8, 12,  0,  5,  2, 15, 13, 10, 14,  3,  6,  7,  1,  9,  4 },
@@ -72,11 +72,11 @@ static const uint8_t bcrypto_blake2b_sigma[12][16] = {
 
 #define G(r, i, a, b, c, d)                             \
   do {                                                  \
-    a = a + b + m[bcrypto_blake2b_sigma[r][2 * i + 0]]; \
+    a = a + b + m[hs_blake2b_sigma[r][2 * i + 0]]; \
     d = rotr64(d ^ a, 32);                              \
     c = c + d;                                          \
     b = rotr64(b ^ c, 24);                              \
-    a = a + b + m[bcrypto_blake2b_sigma[r][2 * i + 1]]; \
+    a = a + b + m[hs_blake2b_sigma[r][2 * i + 1]]; \
     d = rotr64(d ^ a, 16);                              \
     c = c + d;                                          \
     b = rotr64(b ^ c, 63);                              \
@@ -96,45 +96,45 @@ static const uint8_t bcrypto_blake2b_sigma[12][16] = {
 #endif
 
 static void
-bcrypto_blake2b_set_lastnode(bcrypto_blake2b_ctx *ctx) {
+hs_blake2b_set_lastnode(hs_blake2b_ctx *ctx) {
   ctx->f[1] = (uint64_t)-1;
 }
 
 static int
-bcrypto_blake2b_is_lastblock(const bcrypto_blake2b_ctx *ctx) {
+hs_blake2b_is_lastblock(const hs_blake2b_ctx *ctx) {
   return ctx->f[0] != 0;
 }
 
 static void
-bcrypto_blake2b_set_lastblock(bcrypto_blake2b_ctx *ctx) {
+hs_blake2b_set_lastblock(hs_blake2b_ctx *ctx) {
   if (ctx->last_node)
-    bcrypto_blake2b_set_lastnode(ctx);
+    hs_blake2b_set_lastnode(ctx);
 
   ctx->f[0] = (uint64_t)-1;
 }
 
 static void
-bcrypto_blake2b_increment_counter(bcrypto_blake2b_ctx *ctx, const uint64_t inc) {
+hs_blake2b_increment_counter(hs_blake2b_ctx *ctx, const uint64_t inc) {
   ctx->t[0] += inc;
   ctx->t[1] += (ctx->t[0] < inc);
 }
 
 static void
-bcrypto_blake2b_init0(bcrypto_blake2b_ctx *ctx) {
+hs_blake2b_init0(hs_blake2b_ctx *ctx) {
   size_t i;
 
-  memset(ctx, 0, sizeof(bcrypto_blake2b_ctx));
+  memset(ctx, 0, sizeof(hs_blake2b_ctx));
 
   for (i = 0; i < 8; i++)
-    ctx->h[i] = bcrypto_blake2b_IV[i];
+    ctx->h[i] = hs_blake2b_IV[i];
 }
 
 int
-bcrypto_blake2b_init_param(bcrypto_blake2b_ctx *ctx, const bcrypto_blake2b_param *P) {
+hs_blake2b_init_param(hs_blake2b_ctx *ctx, const hs_blake2b_param *P) {
   const uint8_t *p = (const uint8_t *)(P);
   size_t i;
 
-  bcrypto_blake2b_init0(ctx);
+  hs_blake2b_init0(ctx);
 
   for (i = 0; i < 8; i++)
     ctx->h[i] ^= load64(p + sizeof(ctx->h[i]) * i);
@@ -145,10 +145,10 @@ bcrypto_blake2b_init_param(bcrypto_blake2b_ctx *ctx, const bcrypto_blake2b_param
 }
 
 int
-bcrypto_blake2b_init(bcrypto_blake2b_ctx *ctx, size_t outlen) {
-  bcrypto_blake2b_param P[1];
+hs_blake2b_init(hs_blake2b_ctx *ctx, size_t outlen) {
+  hs_blake2b_param P[1];
 
-  if ((!outlen) || (outlen > BCRYPTO_BLAKE2B_OUTBYTES))
+  if ((!outlen) || (outlen > HS_BLAKE2B_OUTBYTES))
     return -1;
 
   P->digest_length = (uint8_t)outlen;
@@ -164,22 +164,22 @@ bcrypto_blake2b_init(bcrypto_blake2b_ctx *ctx, size_t outlen) {
   memset(P->salt, 0, sizeof(P->salt));
   memset(P->personal, 0, sizeof(P->personal));
 
-  return bcrypto_blake2b_init_param(ctx, P);
+  return hs_blake2b_init_param(ctx, P);
 }
 
 int
-bcrypto_blake2b_init_key(
-  bcrypto_blake2b_ctx *ctx,
+hs_blake2b_init_key(
+  hs_blake2b_ctx *ctx,
   size_t outlen,
   const void *key,
   size_t keylen
 ) {
-  bcrypto_blake2b_param P[1];
+  hs_blake2b_param P[1];
 
-  if ((!outlen) || (outlen > BCRYPTO_BLAKE2B_OUTBYTES))
+  if ((!outlen) || (outlen > HS_BLAKE2B_OUTBYTES))
     return -1;
 
-  if (!key || !keylen || keylen > BCRYPTO_BLAKE2B_KEYBYTES)
+  if (!key || !keylen || keylen > HS_BLAKE2B_KEYBYTES)
     return -1;
 
   P->digest_length = (uint8_t)outlen;
@@ -195,26 +195,26 @@ bcrypto_blake2b_init_key(
   memset(P->salt, 0, sizeof(P->salt));
   memset(P->personal, 0, sizeof(P->personal));
 
-  if (bcrypto_blake2b_init_param(ctx, P) < 0)
+  if (hs_blake2b_init_param(ctx, P) < 0)
     return -1;
 
   {
-    uint8_t block[BCRYPTO_BLAKE2B_BLOCKBYTES];
-    memset(block, 0, BCRYPTO_BLAKE2B_BLOCKBYTES);
+    uint8_t block[HS_BLAKE2B_BLOCKBYTES];
+    memset(block, 0, HS_BLAKE2B_BLOCKBYTES);
     memcpy(block, key, keylen);
-    bcrypto_blake2b_update(ctx, block, BCRYPTO_BLAKE2B_BLOCKBYTES);
-    secure_zero_memory(block, BCRYPTO_BLAKE2B_BLOCKBYTES);
+    hs_blake2b_update(ctx, block, HS_BLAKE2B_BLOCKBYTES);
+    secure_zero_memory(block, HS_BLAKE2B_BLOCKBYTES);
   }
 
   return 0;
 }
 
 static void
-bcrypto_blake2b_compress(
-  bcrypto_blake2b_ctx *ctx,
-  const uint8_t block[BCRYPTO_BLAKE2B_BLOCKBYTES]
+hs_blake2b_compress(
+  hs_blake2b_ctx *ctx,
+  const uint8_t block[HS_BLAKE2B_BLOCKBYTES]
 ) {
-#if defined(BCRYPTO_USE_SSE) && defined(HAVE_SSE2)
+#if defined(HS_USE_SSE) && defined(HAVE_SSE2)
   __m128i row1l, row1h;
   __m128i row2l, row2h;
   __m128i row3l, row3h;
@@ -258,10 +258,10 @@ bcrypto_blake2b_compress(
   row1h = LOADU(&ctx->h[2]);
   row2l = LOADU(&ctx->h[4]);
   row2h = LOADU(&ctx->h[6]);
-  row3l = LOADU(&bcrypto_blake2b_IV[0]);
-  row3h = LOADU(&bcrypto_blake2b_IV[2]);
-  row4l = _mm_xor_si128(LOADU(&bcrypto_blake2b_IV[4]), LOADU(&ctx->t[0]));
-  row4h = _mm_xor_si128(LOADU(&bcrypto_blake2b_IV[6]), LOADU(&ctx->f[0]));
+  row3l = LOADU(&hs_blake2b_IV[0]);
+  row3h = LOADU(&hs_blake2b_IV[2]);
+  row4l = _mm_xor_si128(LOADU(&hs_blake2b_IV[4]), LOADU(&ctx->t[0]));
+  row4h = _mm_xor_si128(LOADU(&hs_blake2b_IV[6]), LOADU(&ctx->f[0]));
   ROUND(0);
   ROUND(1);
   ROUND(2);
@@ -293,14 +293,14 @@ bcrypto_blake2b_compress(
   for (i = 0; i < 8; i++)
     v[i] = ctx->h[i];
 
-  v[8] = bcrypto_blake2b_IV[0];
-  v[9] = bcrypto_blake2b_IV[1];
-  v[10] = bcrypto_blake2b_IV[2];
-  v[11] = bcrypto_blake2b_IV[3];
-  v[12] = bcrypto_blake2b_IV[4] ^ ctx->t[0];
-  v[13] = bcrypto_blake2b_IV[5] ^ ctx->t[1];
-  v[14] = bcrypto_blake2b_IV[6] ^ ctx->f[0];
-  v[15] = bcrypto_blake2b_IV[7] ^ ctx->f[1];
+  v[8] = hs_blake2b_IV[0];
+  v[9] = hs_blake2b_IV[1];
+  v[10] = hs_blake2b_IV[2];
+  v[11] = hs_blake2b_IV[3];
+  v[12] = hs_blake2b_IV[4] ^ ctx->t[0];
+  v[13] = hs_blake2b_IV[5] ^ ctx->t[1];
+  v[14] = hs_blake2b_IV[6] ^ ctx->f[0];
+  v[15] = hs_blake2b_IV[7] ^ ctx->f[1];
 
   ROUND(0);
   ROUND(1);
@@ -323,28 +323,28 @@ bcrypto_blake2b_compress(
 }
 
 int
-bcrypto_blake2b_update(bcrypto_blake2b_ctx *ctx, const void *pin, size_t inlen) {
+hs_blake2b_update(hs_blake2b_ctx *ctx, const void *pin, size_t inlen) {
   const unsigned char * in = (const unsigned char *)pin;
 
   if (inlen > 0) {
     size_t left = ctx->buflen;
-    size_t fill = BCRYPTO_BLAKE2B_BLOCKBYTES - left;
+    size_t fill = HS_BLAKE2B_BLOCKBYTES - left;
 
     if (inlen > fill) {
       ctx->buflen = 0;
       memcpy(ctx->buf + left, in, fill);
 
-      bcrypto_blake2b_increment_counter(ctx, BCRYPTO_BLAKE2B_BLOCKBYTES);
-      bcrypto_blake2b_compress(ctx, ctx->buf);
+      hs_blake2b_increment_counter(ctx, HS_BLAKE2B_BLOCKBYTES);
+      hs_blake2b_compress(ctx, ctx->buf);
 
       in += fill;
       inlen -= fill;
 
-      while (inlen > BCRYPTO_BLAKE2B_BLOCKBYTES) {
-        bcrypto_blake2b_increment_counter(ctx, BCRYPTO_BLAKE2B_BLOCKBYTES);
-        bcrypto_blake2b_compress(ctx, in);
-        in += BCRYPTO_BLAKE2B_BLOCKBYTES;
-        inlen -= BCRYPTO_BLAKE2B_BLOCKBYTES;
+      while (inlen > HS_BLAKE2B_BLOCKBYTES) {
+        hs_blake2b_increment_counter(ctx, HS_BLAKE2B_BLOCKBYTES);
+        hs_blake2b_compress(ctx, in);
+        in += HS_BLAKE2B_BLOCKBYTES;
+        inlen -= HS_BLAKE2B_BLOCKBYTES;
       }
     }
 
@@ -356,20 +356,20 @@ bcrypto_blake2b_update(bcrypto_blake2b_ctx *ctx, const void *pin, size_t inlen) 
 }
 
 int
-bcrypto_blake2b_final(bcrypto_blake2b_ctx *ctx, void *out, size_t outlen) {
-  uint8_t buffer[BCRYPTO_BLAKE2B_OUTBYTES] = {0};
+hs_blake2b_final(hs_blake2b_ctx *ctx, void *out, size_t outlen) {
+  uint8_t buffer[HS_BLAKE2B_OUTBYTES] = {0};
   size_t i;
 
   if (out == NULL || outlen < ctx->outlen)
     return -1;
 
-  if (bcrypto_blake2b_is_lastblock(ctx))
+  if (hs_blake2b_is_lastblock(ctx))
     return -1;
 
-  bcrypto_blake2b_increment_counter(ctx, ctx->buflen);
-  bcrypto_blake2b_set_lastblock(ctx);
-  memset(ctx->buf + ctx->buflen, 0, BCRYPTO_BLAKE2B_BLOCKBYTES - ctx->buflen);
-  bcrypto_blake2b_compress(ctx, ctx->buf);
+  hs_blake2b_increment_counter(ctx, ctx->buflen);
+  hs_blake2b_set_lastblock(ctx);
+  memset(ctx->buf + ctx->buflen, 0, HS_BLAKE2B_BLOCKBYTES - ctx->buflen);
+  hs_blake2b_compress(ctx, ctx->buf);
 
   for (i = 0; i < 8; i++)
     store64(buffer + sizeof(ctx->h[i]) * i, ctx->h[i]);
@@ -381,7 +381,7 @@ bcrypto_blake2b_final(bcrypto_blake2b_ctx *ctx, void *out, size_t outlen) {
 }
 
 int
-bcrypto_blake2b(
+hs_blake2b(
   void *out,
   size_t outlen,
   const void *in,
@@ -389,7 +389,7 @@ bcrypto_blake2b(
   const void *key,
   size_t keylen
 ) {
-  bcrypto_blake2b_ctx ctx;
+  hs_blake2b_ctx ctx;
 
   if (in == NULL && inlen > 0)
     return -1;
@@ -400,22 +400,22 @@ bcrypto_blake2b(
   if (key == NULL && keylen > 0)
     return -1;
 
-  if (!outlen || outlen > BCRYPTO_BLAKE2B_OUTBYTES)
+  if (!outlen || outlen > HS_BLAKE2B_OUTBYTES)
     return -1;
 
-  if (keylen > BCRYPTO_BLAKE2B_KEYBYTES)
+  if (keylen > HS_BLAKE2B_KEYBYTES)
     return -1;
 
   if (keylen > 0) {
-    if (bcrypto_blake2b_init_key(&ctx, outlen, key, keylen) < 0)
+    if (hs_blake2b_init_key(&ctx, outlen, key, keylen) < 0)
       return -1;
   } else {
-    if (bcrypto_blake2b_init(&ctx, outlen) < 0)
+    if (hs_blake2b_init(&ctx, outlen) < 0)
       return -1;
   }
 
-  bcrypto_blake2b_update(&ctx, (const uint8_t *)in, inlen);
-  bcrypto_blake2b_final(&ctx, out, outlen);
+  hs_blake2b_update(&ctx, (const uint8_t *)in, inlen);
+  hs_blake2b_final(&ctx, out, outlen);
 
   return 0;
 }
