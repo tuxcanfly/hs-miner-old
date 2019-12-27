@@ -15,7 +15,7 @@
 #include <nan.h>
 
 #include "hs-miner.h"
-#include "../tromp/blake2.h"
+#include "../blake2b/blake2b.h"
 #include "../common.h"
 
 typedef std::unordered_map<uint32_t, hs_options_t *> job_map_t;
@@ -40,7 +40,7 @@ private:
   hs_options_t *options;
   hs_miner_func mine_func;
   int32_t rc;
-  uint8_t solution[PROOFSIZE * 4];
+  uint8_t solution[32];
   uint32_t nonce;
   bool match;
 };
@@ -57,7 +57,7 @@ MinerWorker::MinerWorker (
   , match(false)
 {
   Nan::HandleScope scope;
-  memset(solution, 0, PROOFSIZE * 4);
+  memset(solution, 0, 32);
 }
 
 MinerWorker::~MinerWorker() {
@@ -159,7 +159,7 @@ MinerWorker::HandleOKCallback() {
   v8::Local<v8::Array> ret = Nan::New<v8::Array>();
 
   Nan::Set(ret, 0,
-    Nan::CopyBuffer((char *)solution, PROOFSIZE * 4).ToLocalChecked());
+    Nan::CopyBuffer((char *)solution, 32).ToLocalChecked());
   Nan::Set(ret, 1, Nan::New<v8::Uint32>(nonce));
   Nan::Set(ret, 2, Nan::New<v8::Boolean>(match));
 
@@ -168,33 +168,32 @@ MinerWorker::HandleOKCallback() {
   callback->Call(2, argv, async_resource);
 }
 
+// TODO: figure out HS_HAS_OPENCL
+// but maybe its premature
+// use HAS_CUDA and HAS_OPENCL
+// then can select with a runtime arg
 static hs_miner_func
-get_miner_func(const char *backend, bool *is_cuda) {
-  if (is_cuda)
-    *is_cuda = false;
+get_miner_func(const char *backend, uint8_t *type) {
 
+// TODO: figure out if this type cast works
 #ifdef HS_HAS_CUDA
-  if (strcmp(backend, "mean-cuda") == 0) {
-    if (is_cuda)
-      *is_cuda = true;
-    return hs_mean_cuda_run;
-  }
-
-  if (strcmp(backend, "lean-cuda") == 0) {
-    if (is_cuda)
-      *is_cuda = true;
-    return hs_lean_cuda_run;
+  if (strcmp(backend, "cuda") == 0) {
+    *type = (uint8_t)backend::cuda;
+    return hs_cuda_run;
   }
 #endif
 
-  if (strcmp(backend, "mean") == 0)
-    return hs_mean_run;
+#ifdef HS_HAS_OPENCL
+  if (strcmp(backend, "opencl") == 0) {
+    *type = (uint8_t)backend::opencl;
+    return hs_opencl_run;
+  }
+#endif
 
-  if (strcmp(backend, "lean") == 0)
-    return hs_lean_run;
-
-  if (strcmp(backend, "simple") == 0)
-    return hs_simple_run;
+  if (strcmp(backend, "cpu") == 0) {
+    *type = (uint8_t)backend::cpu;
+    return hs_cpu_run;
+  }
 
   return NULL;
 }
@@ -269,10 +268,10 @@ NAN_METHOD(mine) {
   options.trims = trims;
   options.device = device;
   options.log = false;
-  options.is_cuda = false;
+  options.type = NULL;
   options.running = true;
 
-  uint8_t solution[PROOFSIZE * 4];
+  uint8_t solution[32];
   bool match;
 
   int32_t rc = mine_func(&options, solution, &nonce, &match);
@@ -325,13 +324,15 @@ NAN_METHOD(mine) {
   v8::Local<v8::Array> ret = Nan::New<v8::Array>();
 
   Nan::Set(ret, 0,
-    Nan::CopyBuffer((char *)solution, PROOFSIZE * 4).ToLocalChecked());
+    Nan::CopyBuffer((char *)solution, 32).ToLocalChecked());
   Nan::Set(ret, 1, Nan::New<v8::Uint32>(nonce));
   Nan::Set(ret, 2, Nan::New<v8::Boolean>(match));
 
   info.GetReturnValue().Set(ret);
 }
 
+// TODO: most important function
+// allow for both shares and headers to be passed in
 NAN_METHOD(mine_async) {
   if (info.Length() < 9)
     return Nan::ThrowError("mine_async() requires arguments.");
@@ -370,9 +371,11 @@ NAN_METHOD(mine_async) {
   const uint8_t *hdr = (const uint8_t *)node::Buffer::Data(hdr_buf);
   size_t hdr_len = node::Buffer::Length(hdr_buf);
 
+  // TODO: neet to set min/max header size correctly
   if (hdr_len < MIN_HEADER_SIZE || hdr_len > MAX_HEADER_SIZE)
     return Nan::ThrowError("Invalid header size.");
 
+  // TODO: get rid of this, no longer necessary
   if ((hdr_len % 4) != 0)
     return Nan::ThrowError("Invalid header size.");
 
@@ -384,8 +387,9 @@ NAN_METHOD(mine_async) {
 
   Nan::Utf8String backend_(info[0]);
   const char *backend = (const char *)*backend_;
-  bool is_cuda;
-  hs_miner_func mine_func = get_miner_func(backend, &is_cuda);
+
+  uint8_t type;
+  hs_miner_func mine_func = get_miner_func(backend, &type);
 
   if (mine_func == NULL)
     return Nan::ThrowError("Unknown miner function.");
@@ -412,14 +416,19 @@ NAN_METHOD(mine_async) {
   options->trims = trims;
   options->device = device;
   options->log = false;
-  options->is_cuda = is_cuda;
+  options->type = NULL;
+  // TODO: need mapping of enum to string
+  //options->type = "foo"; // testing...
   options->running = true;
 
+  /*
+  if type is cpu?
   if (!is_cuda) {
     options->device = job_counter;
     options->device |= 1 << 31;
     job_counter += 1;
   }
+  */
 
   MinerWorker *worker = new MinerWorker(
     options,
@@ -497,6 +506,7 @@ NAN_METHOD(stop_all) {
   info.GetReturnValue().Set(Nan::New<v8::Boolean>(ret));
 }
 
+// TODO: this needs to be fixed
 NAN_METHOD(verify) {
   if (info.Length() < 3)
     return Nan::ThrowError("verify() requires arguments.");
@@ -523,7 +533,7 @@ NAN_METHOD(verify) {
   const uint8_t *solution = (const uint8_t *)node::Buffer::Data(sol_buf);
   size_t solution_len = node::Buffer::Length(sol_buf);
 
-  if (solution_len != PROOFSIZE * 4)
+  if (solution_len != 32)
     return Nan::ThrowTypeError("Invalid proof size.");
 
   const uint8_t *target = (const uint8_t *)node::Buffer::Data(target_buf);
@@ -554,9 +564,9 @@ NAN_METHOD(blake2b) {
   const uint8_t *data = (const uint8_t *)node::Buffer::Data(data_buf);
   size_t data_len = node::Buffer::Length(data_buf);
 
-  uint8_t hash[32];
+  uint8_t hash[64];
 
-  blake2b(
+  hs_blake2b(
     (void *)hash,
     sizeof(hash),
     (const void *)data,
@@ -565,7 +575,7 @@ NAN_METHOD(blake2b) {
     0
   );
 
-  info.GetReturnValue().Set(Nan::CopyBuffer((char *)hash, 32).ToLocalChecked());
+  info.GetReturnValue().Set(Nan::CopyBuffer((char *)hash, 64).ToLocalChecked());
 }
 
 NAN_METHOD(sha3) {
@@ -582,37 +592,64 @@ NAN_METHOD(sha3) {
 
   uint8_t hash[32];
 
-  hs_pow_hash(data, data_len, hash);
+  hs_sha3(data, data_len, hash);
 
   info.GetReturnValue().Set(Nan::CopyBuffer((char *)hash, 32).ToLocalChecked());
 }
 
-NAN_METHOD(get_edge_bits) {
-  if (info.Length() != 0)
-    return Nan::ThrowError("get_edge_bits() requires no arguments.");
+NAN_METHOD(hash_header) {
+  if (info.Length() != 1)
+    return Nan::ThrowError("pow_hash() requires arguments.");
 
-  info.GetReturnValue().Set(Nan::New<v8::Uint32>(EDGEBITS));
+  v8::Local<v8::Object> data_buf = info[0].As<v8::Object>();
+
+  if (!node::Buffer::HasInstance(data_buf))
+    return Nan::ThrowTypeError("`data` must be a buffer.");
+
+  const uint8_t *data = (const uint8_t *)node::Buffer::Data(data_buf);
+  size_t data_len = node::Buffer::Length(data_buf);
+
+  if (data_len != 236)
+    return Nan::ThrowTypeError("header must be 236 bytes.");
+
+  uint8_t hash[32];
+
+  hs_header_t *hdr = hs_header_alloc();
+  hs_header_decode(data, data_len, hdr);
+
+  hs_hash_header(hdr, hash);
+
+  // TODO: use custom free?
+  free(hdr);
+
+  info.GetReturnValue().Set(Nan::CopyBuffer((char *)hash, 32).ToLocalChecked());
 }
 
-NAN_METHOD(get_proof_size) {
-  if (info.Length() != 0)
-    return Nan::ThrowError("get_proof_size() requires no arguments.");
+NAN_METHOD(hash_share) {
+  if (info.Length() != 1)
+    return Nan::ThrowError("pow_hash() requires arguments.");
 
-  info.GetReturnValue().Set(Nan::New<v8::Uint32>(PROOFSIZE));
-}
+  v8::Local<v8::Object> data_buf = info[0].As<v8::Object>();
 
-NAN_METHOD(get_perc) {
-  if (info.Length() != 0)
-    return Nan::ThrowError("get_perc() requires no arguments.");
+  if (!node::Buffer::HasInstance(data_buf))
+    return Nan::ThrowTypeError("`data` must be a buffer.");
 
-  info.GetReturnValue().Set(Nan::New<v8::Uint32>(PERC));
-}
+  const uint8_t *data = (const uint8_t *)node::Buffer::Data(data_buf);
+  size_t data_len = node::Buffer::Length(data_buf);
 
-NAN_METHOD(get_easiness) {
-  if (info.Length() != 0)
-    return Nan::ThrowError("get_easiness() requires no arguments.");
+  if (data_len != 128)
+    return Nan::ThrowTypeError("share must be 128 bytes.");
 
-  info.GetReturnValue().Set(Nan::New<v8::Uint32>(EASINESS));
+  uint8_t hash[32];
+
+  // TODO: should prob alloc here instead of inside of there
+  //hs_share_t *share = hs_share_alloc();
+
+  hs_hash_share(data, data_len, hash);
+
+  //free(share);
+
+  info.GetReturnValue().Set(Nan::CopyBuffer((char *)hash, 32).ToLocalChecked());
 }
 
 NAN_METHOD(get_network) {
@@ -727,10 +764,8 @@ NAN_MODULE_INIT(init) {
   Nan::Export(target, "verify", verify);
   Nan::Export(target, "blake2b", blake2b);
   Nan::Export(target, "sha3", sha3);
-  Nan::Export(target, "getEdgeBits", get_edge_bits);
-  Nan::Export(target, "getProofSize", get_proof_size);
-  Nan::Export(target, "getPerc", get_perc);
-  Nan::Export(target, "getEasiness", get_easiness);
+  Nan::Export(target, "hashHeader", hash_header);
+  Nan::Export(target, "hashShare", hash_share);
   Nan::Export(target, "getNetwork", get_network);
   Nan::Export(target, "getBackends", get_backends);
   Nan::Export(target, "hasCUDA", has_cuda);
