@@ -227,18 +227,12 @@ NAN_METHOD(mine) {
     return Nan::ThrowTypeError("`threads` must be a number.");
 
   if (!info[6]->IsNumber())
-    return Nan::ThrowTypeError("`trims` must be a number.");
-
-  if (!info[7]->IsNumber())
     return Nan::ThrowTypeError("`device` must be a number.");
 
   const uint8_t *hdr = (const uint8_t *)node::Buffer::Data(hdr_buf);
   size_t hdr_len = node::Buffer::Length(hdr_buf);
 
-  if (hdr_len != HEADER_SIZE)
-    return Nan::ThrowError("Invalid header size.");
-
-  if ((hdr_len % 4) != 0)
+  if (hdr_len != HEADER_SIZE || hdr_len != SHARE_SIZE)
     return Nan::ThrowError("Invalid header size.");
 
   const uint8_t *target = (const uint8_t *)node::Buffer::Data(target_buf);
@@ -257,8 +251,7 @@ NAN_METHOD(mine) {
   uint32_t nonce = Nan::To<uint32_t>(info[2]).FromJust();
   uint32_t range = Nan::To<uint32_t>(info[3]).FromJust();
   uint32_t threads = Nan::To<uint32_t>(info[5]).FromJust();
-  uint32_t trims = Nan::To<uint32_t>(info[6]).FromJust();
-  uint32_t device = Nan::To<uint32_t>(info[7]).FromJust();
+  uint32_t device = Nan::To<uint32_t>(info[6]).FromJust();
 
   hs_options_t options;
   options.header_len = hdr_len;
@@ -267,7 +260,6 @@ NAN_METHOD(mine) {
   options.range = range;
   memcpy(&options.target[0], target, 32);
   options.threads = threads;
-  options.trims = trims;
   options.device = device;
   options.log = false;
   //options.has_cuda = false;
@@ -333,8 +325,6 @@ NAN_METHOD(mine) {
   info.GetReturnValue().Set(ret);
 }
 
-// TODO: most important function
-// allow for both shares and headers to be passed in
 NAN_METHOD(mine_async) {
   if (info.Length() < 9)
     return Nan::ThrowError("mine_async() requires arguments.");
@@ -362,18 +352,15 @@ NAN_METHOD(mine_async) {
     return Nan::ThrowTypeError("`threads` must be a number.");
 
   if (!info[6]->IsNumber())
-    return Nan::ThrowTypeError("`trims` must be a number.");
-
-  if (!info[7]->IsNumber())
     return Nan::ThrowTypeError("`device` must be a number.");
 
-  if (!info[8]->IsFunction())
+  if (!info[7]->IsFunction())
     return Nan::ThrowTypeError("`callback` must be a function.");
 
   const uint8_t *hdr = (const uint8_t *)node::Buffer::Data(hdr_buf);
   size_t hdr_len = node::Buffer::Length(hdr_buf);
 
-  if (hdr_len != HEADER_SIZE)
+  if (hdr_len != HEADER_SIZE || hdr_len != SHARE_SIZE)
     return Nan::ThrowError("Invalid header size.");
 
   const uint8_t *target = (const uint8_t *)node::Buffer::Data(target_buf);
@@ -385,8 +372,8 @@ NAN_METHOD(mine_async) {
   Nan::Utf8String backend_(info[0]);
   const char *backend = (const char *)*backend_;
 
-  bool has_cuda;
-  hs_miner_func mine_func = get_miner_func(backend, &has_cuda);
+  bool is_cuda;
+  hs_miner_func mine_func = get_miner_func(backend, &is_cuda);
 
   if (mine_func == NULL)
     return Nan::ThrowError("Unknown miner function.");
@@ -394,10 +381,9 @@ NAN_METHOD(mine_async) {
   uint32_t nonce = Nan::To<uint32_t>(info[2]).FromJust();
   uint32_t range = Nan::To<uint32_t>(info[3]).FromJust();
   uint32_t threads = Nan::To<uint32_t>(info[5]).FromJust();
-  uint32_t trims = Nan::To<uint32_t>(info[6]).FromJust();
-  uint32_t device = Nan::To<uint32_t>(info[7]).FromJust();
+  uint32_t device = Nan::To<uint32_t>(info[6]).FromJust();
 
-  v8::Local<v8::Function> callback = info[8].As<v8::Function>();
+  v8::Local<v8::Function> callback = info[7].As<v8::Function>();
 
   hs_options_t *options = (hs_options_t *)malloc(sizeof(hs_options_t));
 
@@ -410,20 +396,16 @@ NAN_METHOD(mine_async) {
   options->range = range;
   memcpy(&options->target[0], target, 32);
   options->threads = threads;
-  options->trims = trims;
   options->device = device;
   options->log = false;
-  // options->is_cuda
+  options->is_cuda = is_cuda;
   options->running = true;
 
-  /*
-  if type is cpu?
   if (!is_cuda) {
     options->device = job_counter;
     options->device |= 1 << 31;
     job_counter += 1;
   }
-  */
 
   MinerWorker *worker = new MinerWorker(
     options,
@@ -664,24 +646,14 @@ NAN_METHOD(get_backends) {
 
   int32_t i = 0;
 
-  Nan::Set(ret, i++, Nan::New<v8::String>("simple").ToLocalChecked());
-
-#if EDGEBITS >= 5
-  Nan::Set(ret, i++, Nan::New<v8::String>("lean").ToLocalChecked());
-#endif
-
-#if EDGEBITS >= 28
-  Nan::Set(ret, i++, Nan::New<v8::String>("mean").ToLocalChecked());
-#endif
+  Nan::Set(ret, i++, Nan::New<v8::String>("cpu").ToLocalChecked());
 
 #ifdef HS_HAS_CUDA
-#if EDGEBITS >= 5
-  Nan::Set(ret, i++, Nan::New<v8::String>("lean-cuda").ToLocalChecked());
+  Nan::Set(ret, i++, Nan::New<v8::String>("cuda").ToLocalChecked());
 #endif
 
-#if EDGEBITS >= 28
-  Nan::Set(ret, i++, Nan::New<v8::String>("mean-cuda").ToLocalChecked());
-#endif
+#ifdef HS_HAS_OPENCL
+  Nan::Set(ret, i++, Nan::New<v8::String>("opencl").ToLocalChecked());
 #endif
 
   info.GetReturnValue().Set(ret);
