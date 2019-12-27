@@ -12,7 +12,10 @@
       "./src/blake2b/blake2b.c",
       "./src/sha3/sha3.c",
       "./src/powng-cpu.cc",
-      "./src/verify.cc"
+      "./src/verify.cc",
+      "./src/header.c",
+      "./src/share.c",
+      "./src/utils.c"
     ],
     "cflags": [
       "-Wall",
