@@ -6,6 +6,8 @@
 #include "sha3/sha3.h"
 #include "share.h"
 #include "bio.h"
+#include "utils.h"
+#include "common.h"
 
 bool
 hs_share_read(uint8_t **data, size_t *data_len, hs_share_t *share) {
@@ -73,18 +75,16 @@ hs_share_alloc(void) {
 }
 
 void
-hs_hash_share(const uint8_t *data, size_t data_len, uint8_t *hash) {
+hs_hash_share(hs_share_t *share, uint8_t *hash) {
   uint8_t pad8[8];
   uint8_t pad32[32];
   uint8_t left[64];
   uint8_t right[32];
 
-  // TODO:
-  // This should probably live outside of this fn
-  hs_share_t *share = hs_share_alloc();
-  hs_share_init(share);
-  hs_share_decode(data, data_len, share);
+  uint8_t data[HEADER_SIZE];
+  hs_share_encode(share, data);
 
+  // Generate Padding
   hs_xor(share->prev_block, share->name_root, pad8, 8);
   hs_xor(share->prev_block, share->name_root, pad32, 32);
 
@@ -108,6 +108,4 @@ hs_hash_share(const uint8_t *data, size_t data_len, uint8_t *hash) {
   hs_blake2b_update(&b_ctx, pad32, 32);
   hs_blake2b_update(&b_ctx, right, 32);
   assert(hs_blake2b_final(&b_ctx, hash, 32) == 0);
-
-  free(share);
 }

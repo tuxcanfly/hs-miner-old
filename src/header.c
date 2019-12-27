@@ -195,6 +195,9 @@ hs_hash_header(const hs_header_t *hdr, uint8_t *hash) {
 
   hs_header_pre_encode(hdr, pre);
 
-  hs_hash_share(pre, size, hash);
+  hs_share_t *share = hs_share_alloc();
+  hs_share_decode(pre, size, share);
+
+  hs_hash_share(share, hash);
 }
 

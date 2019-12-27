@@ -37,7 +37,7 @@ hs_share_t*
 hs_share_alloc(void);
 
 void
-hs_hash_share(const uint8_t *data, size_t data_len, uint8_t *hash);
+hs_hash_share(hs_share_t *share, uint8_t *hash);
 
 #ifdef __cplusplus
 }
