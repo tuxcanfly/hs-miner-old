@@ -65,14 +65,14 @@ HS_BLAKE2B_PACKED(struct hs_blake2b_param__ {
   uint8_t personal[HS_BLAKE2B_PERSONALBYTES];
 });
 
-typedef struct hs_blake2b_param__ bcrypto_blake2b_param;
+typedef struct hs_blake2b_param__ hs_blake2b_param;
 
 enum {
   HS_BLAKE2B_DUMMY =
     1 / (sizeof(hs_blake2b_param) == HS_BLAKE2B_OUTBYTES)
 };
 
-int hs_blake2b_init(bcrypto_blake2b_ctx *ctx, size_t outlen);
+int hs_blake2b_init(hs_blake2b_ctx *ctx, size_t outlen);
 
 int hs_blake2b_init_key(
   hs_blake2b_ctx *ctx,
@@ -88,10 +88,10 @@ hs_blake2b_init_param(
 );
 
 int
-hs_blake2b_update(bcrypto_blake2b_ctx *ctx, const void *in, size_t inlen);
+hs_blake2b_update(hs_blake2b_ctx *ctx, const void *in, size_t inlen);
 
 int
-hs_blake2b_final(bcrypto_blake2b_ctx *ctx, void *out, size_t outlen);
+hs_blake2b_final(hs_blake2b_ctx *ctx, void *out, size_t outlen);
 
 int
 hs_blake2b(
