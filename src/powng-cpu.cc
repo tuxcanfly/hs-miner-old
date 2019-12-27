@@ -13,13 +13,13 @@ hs_cpu_run(
   //uint32_t nonce = options->nonce;
   uint32_t range = 1;
   size_t header_len = options->header_len;
-  uint8_t header[MAX_HEADER_SIZE];
+  uint8_t header[HEADER_SIZE];
   uint8_t hash[32];
   uint8_t chash[32];
 
   memset(hash, 0xff, 32);
 
-  if (header_len < MIN_HEADER_SIZE || header_len > MAX_HEADER_SIZE)
+  if (header_len != HEADER_SIZE)
     return HS_EBADARGS;
 
   memcpy(header, options->header, header_len);
