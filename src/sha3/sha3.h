@@ -53,6 +53,9 @@ void hs_sha3_final(hs_sha3_ctx *ctx, unsigned char *result);
 #define hs_keccak_update hs_sha3_update
 void hs_keccak_final(hs_sha3_ctx *ctx, unsigned char *result);
 
+#define hs_keccak hs_sha3
+void hs_keccak(const unsigned char *data, size_t data_len, unsigned char *hash);
+
 #ifdef __cplusplus
 }
 #endif

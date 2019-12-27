@@ -393,3 +393,11 @@ hs_keccak_final(hs_sha3_ctx *ctx, unsigned char *result) {
   if (result)
     me64_to_le_str(result, ctx->hash, digest_length);
 }
+
+void
+hs_keccak(const uint8_t *data, size_t data_len, uint8_t *hash) {
+  hs_sha3_ctx s_ctx;
+  hs_sha3_256_init(&s_ctx);
+  hs_sha3_update(&s_ctx, data, data_len);
+  hs_sha3_final(&s_ctx, hash);
+}
