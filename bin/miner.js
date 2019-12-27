@@ -45,9 +45,6 @@ class Miner {
     this.log('  Backend: %s', this.backend);
     this.log('  CUDA: %s', miner.HAS_CUDA);
     this.log('  Network: %s', miner.NETWORK);
-    this.log('  Edge Bits: %d', miner.EDGE_BITS);
-    this.log('  Proof Size: %d', miner.PROOF_SIZE);
-    this.log('  Easipct: %d', miner.PERC);
     this.log('');
 
     if (miner.HAS_CUDA) {
@@ -123,6 +120,7 @@ class Miner {
     }
   }
 
+  // TODO: this needs to be updated
   async getWork(root) {
     const res = await this.execute('getwork', [root]);
 
@@ -192,6 +190,9 @@ class Miner {
     return res;
   }
 
+  // TODO: this needs to be updated
+  // the strategy should involve exhausting the nonce
+  // space and then updating the timestamp by a second
   toBlock(hdr, nonce, sol) {
     assert(hdr.length === miner.HDR_SIZE);
     const raw = Buffer.allocUnsafe(hdr.length + 1 + sol.length);
@@ -233,6 +234,7 @@ class Miner {
       if (match)
         return [sol, nonce];
 
+      // TODO: this is not correct
       if (sol) {
         const hash = miner.sha3(sol, 'hex');
         this.log('Best share: %s with %d (device=%d)', hash, nonce, i);
@@ -410,6 +412,7 @@ function writeTime(hdr, time, off) {
   hdr.writeUInt16LE(0, off + 6);
 }
 
+// TODO: update this
 function readHeader(hdr) {
   let hash = undefined;
   let solution = undefined;

@@ -105,8 +105,6 @@ if (!quiet || info) {
   console.log('Backend: %s', backend);
   console.log('CUDA: %s', miner.HAS_CUDA);
   console.log('Network: %s', miner.NETWORK);
-  console.log('Bits: %d', miner.EDGE_BITS);
-  console.log('Size: %d', miner.PROOF_SIZE);
 
   if (miner.HAS_CUDA) {
     console.log('CUDA Devices:');
@@ -143,6 +141,8 @@ if (!quiet || info) {
   }
 
   hdr.writeUInt32LE(result, hdr.length - 4);
+
+  // here...
 
   assert.strictEqual(miner.verify(hdr, sol, match ? target : null), 0);
 
