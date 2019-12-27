@@ -17,6 +17,8 @@
 #include "hs-miner.h"
 #include "../blake2b/blake2b.h"
 #include "../common.h"
+#include "../header.h"
+#include "../share.h"
 
 typedef std::unordered_map<uint32_t, hs_options_t *> job_map_t;
 
@@ -168,30 +170,30 @@ MinerWorker::HandleOKCallback() {
   callback->Call(2, argv, async_resource);
 }
 
-// TODO: figure out HS_HAS_OPENCL
-// but maybe its premature
-// use HAS_CUDA and HAS_OPENCL
-// then can select with a runtime arg
+// TODO: refactor this to work with an
+// enum type instead of bool is_cuda
 static hs_miner_func
-get_miner_func(const char *backend, uint8_t *type) {
-
-// TODO: figure out if this type cast works
+get_miner_func(const char *backend, bool *is_cuda) {
 #ifdef HS_HAS_CUDA
   if (strcmp(backend, "cuda") == 0) {
-    *type = (uint8_t)backend::cuda;
+    if (is_cuda)
+      *is_cuda = true;
     return hs_cuda_run;
   }
 #endif
 
+// TODO: this breaks if HS_HAS_OPENCL is defined
 #ifdef HS_HAS_OPENCL
   if (strcmp(backend, "opencl") == 0) {
-    *type = (uint8_t)backend::opencl;
+    if (is_cuda)
+      *is_cuda = false;
     return hs_opencl_run;
   }
 #endif
 
   if (strcmp(backend, "cpu") == 0) {
-    *type = (uint8_t)backend::cpu;
+    if (is_cuda)
+      *is_cuda = false;
     return hs_cpu_run;
   }
 
@@ -233,7 +235,7 @@ NAN_METHOD(mine) {
   const uint8_t *hdr = (const uint8_t *)node::Buffer::Data(hdr_buf);
   size_t hdr_len = node::Buffer::Length(hdr_buf);
 
-  if (hdr_len < MIN_HEADER_SIZE || hdr_len > MAX_HEADER_SIZE)
+  if (hdr_len != HEADER_SIZE)
     return Nan::ThrowError("Invalid header size.");
 
   if ((hdr_len % 4) != 0)
@@ -268,7 +270,7 @@ NAN_METHOD(mine) {
   options.trims = trims;
   options.device = device;
   options.log = false;
-  options.type = NULL;
+  //options.has_cuda = false;
   options.running = true;
 
   uint8_t solution[32];
@@ -371,12 +373,7 @@ NAN_METHOD(mine_async) {
   const uint8_t *hdr = (const uint8_t *)node::Buffer::Data(hdr_buf);
   size_t hdr_len = node::Buffer::Length(hdr_buf);
 
-  // TODO: neet to set min/max header size correctly
-  if (hdr_len < MIN_HEADER_SIZE || hdr_len > MAX_HEADER_SIZE)
-    return Nan::ThrowError("Invalid header size.");
-
-  // TODO: get rid of this, no longer necessary
-  if ((hdr_len % 4) != 0)
+  if (hdr_len != HEADER_SIZE)
     return Nan::ThrowError("Invalid header size.");
 
   const uint8_t *target = (const uint8_t *)node::Buffer::Data(target_buf);
@@ -388,8 +385,8 @@ NAN_METHOD(mine_async) {
   Nan::Utf8String backend_(info[0]);
   const char *backend = (const char *)*backend_;
 
-  uint8_t type;
-  hs_miner_func mine_func = get_miner_func(backend, &type);
+  bool has_cuda;
+  hs_miner_func mine_func = get_miner_func(backend, &has_cuda);
 
   if (mine_func == NULL)
     return Nan::ThrowError("Unknown miner function.");
@@ -416,9 +413,7 @@ NAN_METHOD(mine_async) {
   options->trims = trims;
   options->device = device;
   options->log = false;
-  options->type = NULL;
-  // TODO: need mapping of enum to string
-  //options->type = "foo"; // testing...
+  // options->is_cuda
   options->running = true;
 
   /*
@@ -527,7 +522,7 @@ NAN_METHOD(verify) {
   const uint8_t *hdr = (const uint8_t *)node::Buffer::Data(hdr_buf);
   size_t hdr_len = node::Buffer::Length(hdr_buf);
 
-  if (hdr_len < MIN_HEADER_SIZE || hdr_len > MAX_HEADER_SIZE)
+  if (hdr_len != HEADER_SIZE)
     return Nan::ThrowTypeError("Invalid header size.");
 
   const uint8_t *solution = (const uint8_t *)node::Buffer::Data(sol_buf);
@@ -619,7 +614,6 @@ NAN_METHOD(hash_header) {
 
   hs_hash_header(hdr, hash);
 
-  // TODO: use custom free?
   free(hdr);
 
   info.GetReturnValue().Set(Nan::CopyBuffer((char *)hash, 32).ToLocalChecked());
@@ -642,12 +636,12 @@ NAN_METHOD(hash_share) {
 
   uint8_t hash[32];
 
-  // TODO: should prob alloc here instead of inside of there
-  //hs_share_t *share = hs_share_alloc();
+  hs_share_t *share = hs_share_alloc();
+  hs_share_decode(data, data_len, share);
 
-  hs_hash_share(data, data_len, hash);
+  hs_hash_share(share, hash);
 
-  //free(share);
+  free(share);
 
   info.GetReturnValue().Set(Nan::CopyBuffer((char *)hash, 32).ToLocalChecked());
 }
