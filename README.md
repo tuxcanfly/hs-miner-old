@@ -1,14 +1,10 @@
 # hs-miner
 
-CUDA-capable Cuckoo Cycle miner for Handshake.
-
-This is a node.js module which hooks into [John Tromp][1]'s [many cuckoo cycle
-miners][2].
+CUDA-capable Blind Sha3Blake miner for Handshake.
 
 ## Building
 
-Tromp's code is not redistributed with this package, so the build process is a
-bit complex and involves cloning and preprocessing a bit of code.
+TODO: test this
 
 ``` bash
 make
@@ -39,7 +35,7 @@ $ hs-mine [header-hex] [target] [backend] -n [nonce] -r [range]
 const miner = require('hs-miner');
 
 // Header without the appended solution.
-const hdr = Buffer.alloc(164, 0x00);
+const hdr = Buffer.alloc(256, 0x00);
 
 if (miner.hasCUDA())
   console.log('Mining with cuda support!');
@@ -47,15 +43,10 @@ if (miner.hasCUDA())
 console.log('CUDA devices:');
 console.log(miner.getDevices());
 
-// This mutates the last 4 bytes of the
+// This mutates the first 4 bytes of the
 // buffer to increment a 32 bit nonce.
-// The header size _must_ be a multiple
-// of 4. This means the last 4 bytes of
-// a handshake header's 20 byte nonce
-// are used as the "regular nonce",
-// whereas the first 16 bytes are the
-// "extra nonces".
-const [sol, nonce, match] = await miner.mineAsync(hdr, {
+// The header size _must_ be 256 bytes.
+const [sol, match] = await miner.mineAsync(hdr, {
   backend: 'mean-cuda',
   nonce: 0,
   range: 0xffffffff,
@@ -65,17 +56,14 @@ const [sol, nonce, match] = await miner.mineAsync(hdr, {
   device: 0
 });
 
-if (!sol) {
+if (!match) {
   console.log('No solution found for nonce range!');
-  // At this point we would increment the other 16
-  // bytes of the header's nonce and try again.
+  // At this point we would increment the timestamp
+  // or the bytes of the header's extra nonce and
+  // try again.
   return;
 }
 
-if (!match) {
-  console.log('A solution was found, but it did not meet the target.');
-
-  const hash = miner.sha3(sol);
   const share = miner.toShare(hash);
 
   // Log the best share (note: we could submit
@@ -89,21 +77,14 @@ if (!match) {
 
 console.log('Solution:');
 console.log(miner.toArray(sol));
-console.log('Nonce: %d', nonce);
 console.log('Match: %s', match);
 ```
-
-If `match` is not true, this means there was a solution (possibly many), but
-they did not pass the target check. The returned solution and nonce will be the
-ones which amount to the lowest hash found. This is useful for submitting
-shares to a mining pool.
-
-Note that `threads` is a percentage (1-100) of Tromp's default parameters when
-used with the `mean-cuda` backend. See `Notes` for more information.
 
 ## API
 
 ### Functions
+
+TODO: this may be out of date
 
 - `miner.mine(hdr, options)` - Mine a to-be-solved header (sync).
 - `miner.mineAsync(hdr, options)` - Mine a to-be-solved header (async).
