@@ -22,6 +22,10 @@ extern "C" {
 #define HEADER_SIZE 236
 #endif
 
+#ifndef MINER_SIZE
+#define MINER_SIZE 256
+#endif
+
 #ifndef SHARE_SIZE
 #define SHARE_SIZE 128
 #endif
@@ -112,7 +116,6 @@ int32_t
 hs_verify(
   const uint8_t *hdr,
   size_t hdr_len,
-  const uint8_t *solution,
   const uint8_t *target
 );
 
