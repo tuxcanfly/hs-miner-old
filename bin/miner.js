@@ -9,7 +9,6 @@ class Miner {
     this.backend = options.backend || miner.BACKEND;
     this.range = options.range || 0;
     this.threads = options.threads || 0;
-    this.trims = options.trims || 0;
     this.device = options.device == null ? -1 : options.device;
     this.ssl = options.ssl || false;
     this.host = options.host || 'localhost';
@@ -18,7 +17,7 @@ class Miner {
     this.pass = options.pass || '';
     this.count = 1;
     this.sequence = 0;
-    this.hdr = Buffer.alloc(miner.HDR_SIZE, 0x00);
+    this.hdr = Buffer.alloc(miner.MINER_SIZE, 0x00);
     this.target = Buffer.alloc(32, 0xff);
     this.height = 0;
     this.mining = false;
@@ -44,6 +43,7 @@ class Miner {
     this.log('Miner params:');
     this.log('  Backend: %s', this.backend);
     this.log('  CUDA: %s', miner.HAS_CUDA);
+    this.log('  OpenCL: %s', miner.HAS_OPENCL);
     this.log('  Network: %s', miner.NETWORK);
     this.log('');
 
@@ -120,7 +120,6 @@ class Miner {
     }
   }
 
-  // TODO: this needs to be updated
   async getWork(root) {
     const res = await this.execute('getwork', [root]);
 
@@ -135,12 +134,12 @@ class Miner {
       process.exit(1);
     }
 
-    if (res.data.length !== miner.HDR_SIZE * 2)
+    if (res.data.length !== miner.MINER_SIZE * 2)
       throw new Error('Bad header size.');
 
     const hdr = Buffer.from(res.data, 'hex');
 
-    if (hdr.length !== miner.HDR_SIZE)
+    if (hdr.length !== miner.MINER_SIZE)
       throw new Error('Bad header size.');
 
     if (res.target.length !== 64)
@@ -190,19 +189,6 @@ class Miner {
     return res;
   }
 
-  // TODO: this needs to be updated
-  // the strategy should involve exhausting the nonce
-  // space and then updating the timestamp by a second
-  toBlock(hdr, nonce, sol) {
-    assert(hdr.length === miner.HDR_SIZE);
-    const raw = Buffer.allocUnsafe(hdr.length + 1 + sol.length);
-    hdr.copy(raw, 0);
-    raw.writeUInt32LE(nonce >>> 0, hdr.length - 4);
-    raw[hdr.length] = sol.length >>> 2;
-    sol.copy(raw, hdr.length + 1);
-    return raw;
-  }
-
   job(index, hdr, target) {
     return miner.mineAsync(hdr, {
       backend: this.backend,
@@ -210,7 +196,6 @@ class Miner {
       range: this.range,
       target,
       threads: this.threads,
-      trims: this.trims,
       device: index
     });
   }
@@ -229,16 +214,10 @@ class Miner {
     const result = await Promise.all(jobs);
 
     for (let i = 0; i < result.length; i++) {
-      const [sol, nonce, match] = result[i];
+      const [sol, match] = result[i];
 
       if (match)
-        return [sol, nonce];
-
-      // TODO: this is not correct
-      if (sol) {
-        const hash = miner.sha3(sol, 'hex');
-        this.log('Best share: %s with %d (device=%d)', hash, nonce, i);
-      }
+        return sol;
     }
 
     return [null, 0];
@@ -272,7 +251,7 @@ class Miner {
         height, target.toString('hex'));
 
       try {
-        [sol, nonce] = await this.mine(hdr, target);
+        sol = await this.mine(hdr, target);
       } catch (e) {
         this.error(e.stack);
         continue;
@@ -288,16 +267,13 @@ class Miner {
         continue;
       }
 
-      this.log('Found solution: %d %s',
-        nonce, miner.sha3(sol).toString('hex'));
-
-      const raw = this.toBlock(hdr, nonce, sol);
+      this.log('Found solution!');
 
       let valid = true;
       let reason = '';
 
       try {
-        [valid, reason] = await this.submitWork(raw);
+        [valid, reason] = await this.submitWork(sol);
       } catch (e) {
         this.error(e.stack);
       }
@@ -368,13 +344,13 @@ class Miner {
  */
 
 function increment(hdr, now) {
-  const time = readTime(hdr, 132);
+  const time = readTime(hdr, 4);
 
   switch (miner.NETWORK) {
     case 'main':
     case 'regtest':
       if (now > time) {
-        writeTime(hdr, now, 132);
+        writeTime(hdr, now, 4);
         return;
       }
       break;
@@ -412,41 +388,35 @@ function writeTime(hdr, time, off) {
   hdr.writeUInt16LE(0, off + 6);
 }
 
-// TODO: update this
+function toBlock(hdr, nonce) {
+  assert(hdr.length === miner.MINER_SIZE);
+  const raw = Buffer.allocUnsafe(hdr.length);
+  raw.writeUInt32LE(nonce);
+  hdr.copy(raw.subarray(4), 4);
+  return raw;
+}
+
+/**
+ * The miner header serialization
+ * is different than the p2p header
+ * serialization.
+ */
 function readHeader(hdr) {
-  let hash = undefined;
-  let solution = undefined;
-  let powHash = undefined;
-
-  if (hdr.length > miner.HDR_SIZE) {
-    const size = hdr[miner.HDR_SIZE] * 4;
-    assert(size === miner.PROOF_SIZE * 4);
-
-    const off = miner.HDR_SIZE + 1;
-
-    assert(hdr.length === off + size);
-
-    hash = miner.blake2b(hdr, 'hex');
-    solution = hdr.slice(off, off + size);
-    powHash = miner.sha3(solution, 'hex');
-
-    solution = solution.toString('hex');
-  } else {
-    assert(hdr.length === miner.HDR_SIZE);
-  }
+  assert(hdr.length === miner.MINER_SIZE);
 
   return {
-    hash,
-    powHash,
-    version: hdr.readUInt32LE(0),
-    prevBlock: hdr.toString('hex', 4, 36),
-    merkleRoot: hdr.toString('hex', 36, 68),
-    treeRoot: hdr.toString('hex', 68, 100),
-    reservedRoot: hdr.toString('hex', 100, 132),
-    time: readTime(hdr, 132),
-    bits: hdr.readUInt32LE(140),
-    nonce: hdr.toString('hex', miner.NONCE_START, miner.HDR_SIZE),
-    solution
+    nonce: hdr.toString('hex', miner.NONCE_START, miner.NONCE_END),
+    time: readTime(hdr, 4),
+    pad20: hdr.toString('hex', 12, 32),
+    prevBlock: hdr.toString('hex', 32, 64),
+    treeRoot: hdr.toString('hex', 64, 96),
+    maskHash: hdr.toString('hex', 96, 128),
+    extraNonce: hdr.toString('hex', miner.EXTRA_NONCE_START, miner.EXTRA_NONCE_END),
+    reservedRoot: hdr.toString('hex', 152, 184),
+    witnessRoot: hdr.toString('hex', 184, 216),
+    merkleRoot: hdr.toString('hex', 216, 248),
+    version: hdr.readUInt32LE(248),
+    bits: hdr.readUInt32LE(252)
   };
 }
 
@@ -473,4 +443,8 @@ function getPort() {
  * Expose
  */
 
+Miner.readHeader = readHeader;
+Miner.toBlock = toBlock;
+Miner.increment = increment;
+Miner.binding = miner;
 module.exports = Miner;
