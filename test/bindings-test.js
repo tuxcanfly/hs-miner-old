@@ -5,7 +5,7 @@ const miner = require('../');
 const sha3 = require('./vendor/sha3');
 const blake2b = require('./vendor/blake2b');
 
-describe('Hash functions', function () {
+describe('Bindings', function () {
   it('sha3', () => {
     const input = Buffer.from('00', 'hex');
     const output = miner.sha3(input);
