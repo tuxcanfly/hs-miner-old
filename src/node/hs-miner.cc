@@ -151,8 +151,7 @@ MinerWorker::HandleOKCallback() {
   if (rc == HS_ENOSOLUTION) {
     v8::Local<v8::Array> ret = Nan::New<v8::Array>();
     Nan::Set(ret, 0, Nan::Null());
-    Nan::Set(ret, 1, Nan::New<v8::Uint32>(0));
-    Nan::Set(ret, 2, Nan::New<v8::Boolean>(false));
+    Nan::Set(ret, 1, Nan::New<v8::Boolean>(false));
     v8::Local<v8::Value> argv[] = { Nan::Null(), ret };
     callback->Call(2, argv, async_resource);
     return;
@@ -161,9 +160,8 @@ MinerWorker::HandleOKCallback() {
   v8::Local<v8::Array> ret = Nan::New<v8::Array>();
 
   Nan::Set(ret, 0,
-    Nan::CopyBuffer((char *)solution, 32).ToLocalChecked());
-  Nan::Set(ret, 1, Nan::New<v8::Uint32>(nonce));
-  Nan::Set(ret, 2, Nan::New<v8::Boolean>(match));
+    Nan::CopyBuffer((char *)solution, MINER_SIZE).ToLocalChecked());
+  Nan::Set(ret, 1, Nan::New<v8::Boolean>(match));
 
   v8::Local<v8::Value> argv[] = { Nan::Null(), ret };
 
@@ -232,7 +230,7 @@ NAN_METHOD(mine) {
   const uint8_t *hdr = (const uint8_t *)node::Buffer::Data(hdr_buf);
   size_t hdr_len = node::Buffer::Length(hdr_buf);
 
-  if (hdr_len != HEADER_SIZE || hdr_len != SHARE_SIZE)
+  if (hdr_len != MINER_SIZE)
     return Nan::ThrowError("Invalid header size.");
 
   const uint8_t *target = (const uint8_t *)node::Buffer::Data(target_buf);
@@ -262,10 +260,10 @@ NAN_METHOD(mine) {
   options.threads = threads;
   options.device = device;
   options.log = false;
-  //options.has_cuda = false;
+  options.is_cuda = false;
   options.running = true;
 
-  uint8_t solution[32];
+  uint8_t solution[MINER_SIZE];
   bool match;
 
   int32_t rc = mine_func(&options, solution, &nonce, &match);
@@ -290,6 +288,7 @@ NAN_METHOD(mine) {
       return Nan::ThrowError("Invalid CUDA device properties.");
     }
     case HS_ENOSUPPORT: {
+      // TODO: replace this error message
       return Nan::ThrowError("Miner not supported with current cuckoo params.");
     }
     case HS_EMAXLOAD: {
@@ -318,15 +317,14 @@ NAN_METHOD(mine) {
   v8::Local<v8::Array> ret = Nan::New<v8::Array>();
 
   Nan::Set(ret, 0,
-    Nan::CopyBuffer((char *)solution, 32).ToLocalChecked());
-  Nan::Set(ret, 1, Nan::New<v8::Uint32>(nonce));
-  Nan::Set(ret, 2, Nan::New<v8::Boolean>(match));
+    Nan::CopyBuffer((char *)solution, MINER_SIZE).ToLocalChecked());
+  Nan::Set(ret, 1, Nan::New<v8::Boolean>(match));
 
   info.GetReturnValue().Set(ret);
 }
 
 NAN_METHOD(mine_async) {
-  if (info.Length() < 9)
+  if (info.Length() < 8)
     return Nan::ThrowError("mine_async() requires arguments.");
 
   if (!info[0]->IsString())
@@ -360,7 +358,7 @@ NAN_METHOD(mine_async) {
   const uint8_t *hdr = (const uint8_t *)node::Buffer::Data(hdr_buf);
   size_t hdr_len = node::Buffer::Length(hdr_buf);
 
-  if (hdr_len != HEADER_SIZE || hdr_len != SHARE_SIZE)
+  if (hdr_len != MINER_SIZE)
     return Nan::ThrowError("Invalid header size.");
 
   const uint8_t *target = (const uint8_t *)node::Buffer::Data(target_buf);
@@ -485,18 +483,14 @@ NAN_METHOD(stop_all) {
 
 // TODO: this needs to be fixed
 NAN_METHOD(verify) {
-  if (info.Length() < 3)
+  if (info.Length() < 2)
     return Nan::ThrowError("verify() requires arguments.");
 
   v8::Local<v8::Object> hdr_buf = info[0].As<v8::Object>();
-  v8::Local<v8::Object> sol_buf = info[1].As<v8::Object>();
-  v8::Local<v8::Object> target_buf = info[2].As<v8::Object>();
+  v8::Local<v8::Object> target_buf = info[1].As<v8::Object>();
 
   if (!node::Buffer::HasInstance(hdr_buf))
     return Nan::ThrowTypeError("`header` must be a buffer.");
-
-  if (!node::Buffer::HasInstance(sol_buf))
-    return Nan::ThrowTypeError("`solution` must be a buffer.");
 
   if (!node::Buffer::HasInstance(target_buf))
     return Nan::ThrowTypeError("`target` must be a buffer.");
@@ -504,14 +498,8 @@ NAN_METHOD(verify) {
   const uint8_t *hdr = (const uint8_t *)node::Buffer::Data(hdr_buf);
   size_t hdr_len = node::Buffer::Length(hdr_buf);
 
-  if (hdr_len != HEADER_SIZE)
+  if (hdr_len != MINER_SIZE)
     return Nan::ThrowTypeError("Invalid header size.");
-
-  const uint8_t *solution = (const uint8_t *)node::Buffer::Data(sol_buf);
-  size_t solution_len = node::Buffer::Length(sol_buf);
-
-  if (solution_len != 32)
-    return Nan::ThrowTypeError("Invalid proof size.");
 
   const uint8_t *target = (const uint8_t *)node::Buffer::Data(target_buf);
   size_t target_len = node::Buffer::Length(target_buf);
@@ -522,7 +510,6 @@ NAN_METHOD(verify) {
   int32_t rc = hs_verify(
     (uint8_t *)hdr,
     hdr_len,
-    (uint8_t *)solution,
     (uint8_t *)target
   );
 
