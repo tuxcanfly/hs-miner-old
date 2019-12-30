@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdint.h>
 #include "common.h"
 #include "blake2.h"
 #include "sha3.h"
@@ -247,7 +248,7 @@ __device__ void cuda_blake2b_final(cuda_blake2b_ctx_t *ctx, BYTE* out)
     }
 }
 
-__global__ void kernel_blake2b_hash(BYTE* indata, WORD inlen, BYTE* outdata, WORD n_batch, WORD BLAKE2B_BLOCK_SIZE)
+__device__ void kernel_blake2b_hash(BYTE* indata, WORD inlen, BYTE* outdata, WORD n_batch, WORD BLAKE2B_BLOCK_SIZE)
 {
     WORD thread = blockIdx.x * blockDim.x + threadIdx.x;
     if (thread >= n_batch)
@@ -568,7 +569,7 @@ __device__ void cuda_keccak_final(cuda_keccak_ctx_t *ctx, BYTE *out)
     }
 }
 
-__global__ void kernel_keccak_hash(BYTE* indata, WORD inlen, BYTE* outdata, WORD n_batch, WORD KECCAK_BLOCK_SIZE)
+__device__ void kernel_keccak_hash(BYTE* indata, WORD inlen, BYTE* outdata, WORD n_batch, WORD KECCAK_BLOCK_SIZE)
 {
     WORD thread = blockIdx.x * blockDim.x + threadIdx.x;
     if (thread >= n_batch)
@@ -600,8 +601,9 @@ __global__ void kernel_keccak_hash(BYTE* indata, WORD inlen, BYTE* outdata, WORD
  *
  */
 __constant__ uint8_t header[256];
+__constant__ uint8_t target[32];
 
-__global__ void kernel_hs_hash(uint8_t *out, unsigned int n_batch)
+__global__ void kernel_hs_hash(uint8_t *out, unsigned int n_batch, const uint8_t max_threads) // TODO: thann is being stupid w/ the max threads?
 {
     WORD thread = blockIdx.x * blockDim.x + threadIdx.x;
     if (thread >= n_batch)
@@ -612,10 +614,11 @@ __global__ void kernel_hs_hash(uint8_t *out, unsigned int n_batch)
     CUDA_BLAKE2B_CTX b_ctx;
     CUDA_KECCAK_CTX s_ctx;
 
-    uint8_t *hash = out + thread * 32;
+    // uint8_t *hash = out + thread * 32;
+    uint8_t hash[32];
 
-    uint32_t nonce;
-    memcpy(&nonce, header, 4);
+    /*uint32_t nonce;*/
+    /*memcpy(&nonce, header, 4);*/
 
     uint64_t time;
     memcpy(&time, header + 4, 8);
@@ -632,7 +635,8 @@ __global__ void kernel_hs_hash(uint8_t *out, unsigned int n_batch)
     uint8_t mask_hash[32];
     memcpy(mask_hash, header + 96, 32);
 
-    uint8_t extra_nonce[24];
+    //uint8_t extra_nonce[24];
+    uint32_t extra_nonce[6];  // TODO: 64?
     memcpy(extra_nonce, header + 128, 24);
 
     uint8_t reserved_root[32];
@@ -650,6 +654,7 @@ __global__ void kernel_hs_hash(uint8_t *out, unsigned int n_batch)
     uint32_t bits;
     memcpy(&bits, header + 252, 4);
 
+    // TODO: pad & pad8 are just the beginning of pad32...
     uint8_t pad[20];
     uint8_t pad8[8];
     uint8_t pad32[32];
@@ -670,7 +675,7 @@ __global__ void kernel_hs_hash(uint8_t *out, unsigned int n_batch)
     for (i = 0; i < 32; i++)
       pad32[i] = prev_block[i % 32] ^ tree_root[i % 32];
 
-    nonce += thread;
+    /*nonce += thread;*/
 
     uint8_t pre[128];
     uint8_t sub[128];
@@ -679,69 +684,88 @@ __global__ void kernel_hs_hash(uint8_t *out, unsigned int n_batch)
     uint8_t sub_hash[32];
     uint8_t commit_hash[32];
 
-    // subheader
-    memcpy(sub, extra_nonce, 24);
-    memcpy(sub + 24, reserved_root, 32);
-    memcpy(sub + 56, witness_root, 32);
-    memcpy(sub + 88, merkle_root, 32);
-    memcpy(sub + 120, &version, 4);
-    memcpy(sub + 124, &bits, 4);
+    // increment extra nonce
+    for (uint32_t i = 0; i >= UINT32_MAX; i++) {
+      extra_nonce[0] = thread + (i * max_threads); // TODO: too big?
 
-    // sub hash
-    cuda_blake2b_init(&b_ctx, NULL, 0, 256);
-    cuda_blake2b_update(&b_ctx, sub, 128);
-    cuda_blake2b_final(&b_ctx, sub_hash);
+      // subheader
+      memcpy(sub, &extra_nonce, 24);
+      memcpy(sub + 24, reserved_root, 32);
+      memcpy(sub + 56, witness_root, 32);
+      memcpy(sub + 88, merkle_root, 32);
+      memcpy(sub + 120, &version, 4);
+      memcpy(sub + 124, &bits, 4);
 
-    // commit hash
-    cuda_blake2b_init(&b_ctx, NULL, 0, 256);
-    cuda_blake2b_update(&b_ctx, sub_hash, 32);
-    cuda_blake2b_update(&b_ctx, mask_hash, 32);
-    cuda_blake2b_final(&b_ctx, commit_hash);
+      // sub hash
+      cuda_blake2b_init(&b_ctx, NULL, 0, 256);
+      cuda_blake2b_update(&b_ctx, sub, 128);
+      cuda_blake2b_final(&b_ctx, sub_hash);
 
-    // preheader
-    memcpy(pre, &nonce, 4);
-    memcpy(pre + 4, &time, 8);
-    memcpy(pre + 12, pad, 20);
-    memcpy(pre + 32, prev_block, 32);
-    memcpy(pre + 64, tree_root, 32);
-    memcpy(pre + 96, commit_hash, 32);
+      // commit hash
+      cuda_blake2b_init(&b_ctx, NULL, 0, 256);
+      cuda_blake2b_update(&b_ctx, sub_hash, 32);
+      cuda_blake2b_update(&b_ctx, mask_hash, 32);
+      cuda_blake2b_final(&b_ctx, commit_hash);
 
-    // Generate left.
-    cuda_blake2b_init(&b_ctx, NULL, 0, 512);
-    cuda_blake2b_update(&b_ctx, pre, 128);
-    cuda_blake2b_final(&b_ctx, left);
+      // increment nonce
+      for (uint32_t nonce = 0; nonce < UINT32_MAX; nonce++) {
+        //TODO: increment timestamp? go deeper!
+        // preheader
+        memcpy(pre, &nonce, 4);
+        memcpy(pre + 4, &time, 8);
+        memcpy(pre + 12, pad, 20);
+        memcpy(pre + 32, prev_block, 32);
+        memcpy(pre + 64, tree_root, 32);
+        memcpy(pre + 96, commit_hash, 32);
 
-    // Generate right.
-    cuda_keccak_init(&s_ctx, 256);
-    cuda_keccak_update(&s_ctx, pre, 128);
-    cuda_keccak_update(&s_ctx, pad8, 8);
-    cuda_keccak_final(&s_ctx, right);
+        // Generate left.
+        cuda_blake2b_init(&b_ctx, NULL, 0, 512);
+        cuda_blake2b_update(&b_ctx, pre, 128);
+        cuda_blake2b_final(&b_ctx, left);
 
-    // Generate hash.
-    cuda_blake2b_init(&b_ctx, NULL, 0, 256);
-    cuda_blake2b_update(&b_ctx, left, 64);
-    cuda_blake2b_update(&b_ctx, pad32, 32);
-    cuda_blake2b_update(&b_ctx, right, 32);
-    cuda_blake2b_final(&b_ctx, hash);
+        // Generate right.
+        cuda_keccak_init(&s_ctx, 256);
+        cuda_keccak_update(&s_ctx, pre, 128);
+        cuda_keccak_update(&s_ctx, pad8, 8);
+        cuda_keccak_final(&s_ctx, right);
+
+        // Generate hash.
+        cuda_blake2b_init(&b_ctx, NULL, 0, 256);
+        cuda_blake2b_update(&b_ctx, left, 64);
+        cuda_blake2b_update(&b_ctx, pad32, 32);
+        cuda_blake2b_update(&b_ctx, right, 32);
+        cuda_blake2b_final(&b_ctx, hash);
+
+        // compare
+        //TODO: implement memcmp?
+        if (memcmp(hash, target, 32) <= 0) {
+          //TODO: copy!
+          //TODO: assert?
+        }
+      }
+    }
 }
 
 int32_t hs_cuda_run(hs_options_t *options, uint32_t *result, bool *match)
 {
     unsigned int n_batch = options->range;
-    unsigned int thread = 256;
+    const uint8_t thread = 255;
     unsigned int block = (n_batch + thread - 1) / thread;
     uint8_t *out;
     uint8_t *cuda_outdata;
     uint8_t *hash;
 
+    // TODO: zero this out? unless we write to 100% of it
     out = (uint8_t*)malloc(sizeof(uint8_t) * 32 * n_batch);
     hash = (uint8_t*)malloc(sizeof(uint8_t) *  32);
+    // TODO: CUDA outdata needs, nonce, timestamp, extra_nonce
     cudaMalloc(&cuda_outdata, sizeof(uint8_t) * 32 * n_batch);
     cudaMemcpyToSymbol(header, options->header, 256);
+    cudaMemcpyToSymbol(target, options->target, 32);
 
-    kernel_hs_hash<<< block, thread >>>(cuda_outdata, n_batch);
+    kernel_hs_hash<<< block, thread >>>(cuda_outdata, n_batch, thread);
     cudaMemcpy(out, cuda_outdata, 32 * n_batch, cudaMemcpyDeviceToHost);
-    cudaDeviceSynchronize();
+    /*cudaDeviceSynchronize();*/
     cudaError_t error = cudaGetLastError();
     if (error != cudaSuccess) {
         printf("error hs cuda hash: %s \n", cudaGetErrorString(error));
@@ -750,18 +774,20 @@ int32_t hs_cuda_run(hs_options_t *options, uint32_t *result, bool *match)
     }
     cudaFree(cuda_outdata);
 
-    for (int i=0; i < n_batch; i++) {
-        memcpy(hash, out + 32 * i, 32);
+    /*for (int i=0; i < n_batch; i++) {*/
+        /*// Dont need to copy, just compare to out?*/
+        /*memcpy(hash, out + 32 * i, 32);*/
 
-        if (memcmp(hash, options->target, 32) <= 0) {
-            free(out);
-            free(hash);
+        /*if (memcmp(hash, options->target, 32) <= 0) {*/
+            /*free(out);*/
+            /*free(hash);*/
 
-            *result = i;
-            *match = true;
-            return HS_SUCCESS;
-        }
-    }
+            /**result = i;*/
+            /**match = true;*/
+            /*[>return HS_SUCCESS;<]*/
+            /*return HS_SUCCESS;*/
+        /*}*/
+    /*}*/
 
     free(out);
     free(hash);

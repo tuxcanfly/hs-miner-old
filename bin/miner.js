@@ -251,7 +251,8 @@ class Miner {
 
       const [hdr, target, height, root] = this.getJob();
 
-      increment(hdr, this.now());
+      //increment(hdr, this.now());
+      // TODO: should we kill/reject the mining process when we get new transactions?
 
       this.log('Mining height %d (target=%s).',
         height, target.toString('hex'));
@@ -264,7 +265,8 @@ class Miner {
       }
 
       if (!valid) {
-        increment(hdr, this.now());
+        //increment(hdr, this.now());
+        //TODO: what goes here now? Extra_nonce?
         continue
       }
 
@@ -288,6 +290,7 @@ class Miner {
       if (!valid) {
         this.log('Invalid block submitted: %s.', miner.blake2b(raw, 'hex'));
         this.log('Reason: %s', reason);
+        process.exit(69); //TODO: remove!
       }
 
       if (root !== this.root) {
