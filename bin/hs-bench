@@ -23,10 +23,12 @@ function bench(name) {
 
 const hdr = Buffer.alloc(256);
 
-const mining = bench('hs-mine');
-miner.mine(hdr, {
-  backend: miner.BACKEND,
-  target: miner.TARGET,
-  threads: RANGE
-});
-mining(RANGE);
+for (let i=0; i<5; i++) {
+  const mining = bench('hs-mine');
+  miner.mine(hdr, {
+    backend: miner.BACKEND,
+    target: miner.TARGET,
+    threads: RANGE
+  });
+  mining(RANGE);
+}
