@@ -615,13 +615,9 @@ __device__ int cuda_memcmp(const void *s1, const void *s2, size_t n) {
 	}
 	return 0;
 }
-__global__ void kernel_hs_hash(uint32_t *out_nonce, bool *out_match, unsigned int threads)
+__global__ void kernel_hs_hash(uint32_t *out_nonce, bool *out_match, uint16_t threads)
 {
     WORD thread = blockIdx.x * blockDim.x + threadIdx.x;
-    if (thread >= threads)
-    {
-        return;
-    }
 
     CUDA_BLAKE2B_CTX b_ctx;
     CUDA_KECCAK_CTX s_ctx;
@@ -629,7 +625,6 @@ __global__ void kernel_hs_hash(uint32_t *out_nonce, bool *out_match, unsigned in
     uint8_t hash[32];
 
     uint32_t nonce;
-    memcpy(&nonce, header, 4);
 
     uint64_t time;
     memcpy(&time, header + 4, 8);
@@ -684,7 +679,6 @@ __global__ void kernel_hs_hash(uint32_t *out_nonce, bool *out_match, unsigned in
     for (i = 0; i < 32; i++)
       pad32[i] = prev_block[i % 32] ^ tree_root[i % 32];
 
-    nonce += thread;
 
     uint8_t pre[128];
     uint8_t sub[128];
@@ -712,41 +706,45 @@ __global__ void kernel_hs_hash(uint32_t *out_nonce, bool *out_match, unsigned in
     cuda_blake2b_update(&b_ctx, mask_hash, 32);
     cuda_blake2b_final(&b_ctx, commit_hash);
 
-    // preheader
-    memcpy(pre, &nonce, 4);
-    memcpy(pre + 4, &time, 8);
-    memcpy(pre + 12, pad, 20);
-    memcpy(pre + 32, prev_block, 32);
-    memcpy(pre + 64, tree_root, 32);
-    memcpy(pre + 96, commit_hash, 32);
+    for (uint16_t i = 0; i < 20000; i++) {
+      nonce = thread + (i * threads);
+      // preheader
+      memcpy(pre, &nonce, 4);
+      memcpy(pre + 4, &time, 8);
+      memcpy(pre + 12, pad, 20);
+      memcpy(pre + 32, prev_block, 32);
+      memcpy(pre + 64, tree_root, 32);
+      memcpy(pre + 96, commit_hash, 32);
 
-    // Generate left.
-    cuda_blake2b_init(&b_ctx, NULL, 0, 512);
-    cuda_blake2b_update(&b_ctx, pre, 128);
-    cuda_blake2b_final(&b_ctx, left);
+      // Generate left.
+      cuda_blake2b_init(&b_ctx, NULL, 0, 512);
+      cuda_blake2b_update(&b_ctx, pre, 128);
+      cuda_blake2b_final(&b_ctx, left);
 
-    // Generate right.
-    cuda_keccak_init(&s_ctx, 256);
-    cuda_keccak_update(&s_ctx, pre, 128);
-    cuda_keccak_update(&s_ctx, pad8, 8);
-    cuda_keccak_final(&s_ctx, right);
+      // Generate right.
+      cuda_keccak_init(&s_ctx, 256);
+      cuda_keccak_update(&s_ctx, pre, 128);
+      cuda_keccak_update(&s_ctx, pad8, 8);
+      cuda_keccak_final(&s_ctx, right);
 
-    // Generate hash.
-    cuda_blake2b_init(&b_ctx, NULL, 0, 256);
-    cuda_blake2b_update(&b_ctx, left, 64);
-    cuda_blake2b_update(&b_ctx, pad32, 32);
-    cuda_blake2b_update(&b_ctx, right, 32);
-    cuda_blake2b_final(&b_ctx, hash);
+      // Generate hash.
+      cuda_blake2b_init(&b_ctx, NULL, 0, 256);
+      cuda_blake2b_update(&b_ctx, left, 64);
+      cuda_blake2b_update(&b_ctx, pad32, 32);
+      cuda_blake2b_update(&b_ctx, right, 32);
+      cuda_blake2b_final(&b_ctx, hash);
 
-    if (cuda_memcmp(hash, target, 32) <= 0) {
-        *out_nonce = thread;
-        *out_match = true;
-        return;
+      if (cuda_memcmp(hash, target, 32) <= 0) {
+	  *out_nonce = thread;
+	  *out_match = true;
+	  return;
+      }
     }
 }
 
 int32_t hs_cuda_run(hs_options_t *options, uint32_t *result, bool *match)
 {
+    const uint16_t threads = 382;
     uint32_t *out_nonce;
     bool *out_match;
 
@@ -755,7 +753,8 @@ int32_t hs_cuda_run(hs_options_t *options, uint32_t *result, bool *match)
     cudaMemcpyToSymbol(header, options->header, 256);
     cudaMemcpyToSymbol(target, options->target, 32);
 
-    kernel_hs_hash<<< options->grids, options->blocks >>>(out_nonce, out_match, options->threads);
+    /*kernel_hs_hash<<< options->grids, options->blocks >>>(out_nonce, out_match, options->threads);*/
+    kernel_hs_hash<<< 1, threads >>>(out_nonce, out_match, threads);
     cudaMemcpy(result, out_nonce, sizeof(uint32_t), cudaMemcpyDeviceToHost);
     cudaMemcpy(match, out_match, sizeof(bool), cudaMemcpyDeviceToHost);
     cudaError_t error = cudaGetLastError();
