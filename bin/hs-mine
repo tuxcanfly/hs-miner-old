@@ -98,11 +98,17 @@ if (!quiet || info) {
   console.log('Backend: %s', backend);
   console.log('CUDA: %s', miner.HAS_CUDA);
   console.log('Network: %s', miner.NETWORK);
+  console.log('OpenCL: %s', miner.HAS_OPENCL);
 
-  if (miner.HAS_CUDA) {
+  // TODO: figure this logic out...
+
+  if (miner.HAS_CUDA && backend === 'cuda') {
     console.log('CUDA Devices:');
     for (const {id, name, memory, bits, clock} of miner.getDevices())
       console.log(`  ${id}: <${name}> ${memory} ${bits} ${clock}`);
+  } else if (miner.HAS_OPENCL && backend === 'opencl') {
+    console.log('OpenCL devices:');
+    // TODO:
   } else {
     console.log('CPUs:');
     for (const {id, name, memory, bits, clock} of miner.getCPUs())

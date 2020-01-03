@@ -45,11 +45,16 @@ class Miner {
     this.log('Miner params:');
     this.log('  Backend: %s', this.backend);
     this.log('  CUDA: %s', miner.HAS_CUDA);
+    this.log('  OpenCL: %s', miner.HAS_OPENCL);
     this.log('  Network: %s', miner.NETWORK);
     this.log('');
 
     if (miner.HAS_CUDA) {
       this.log('CUDA Devices:');
+      for (const {id, name, memory, bits, clock} of miner.getDevices())
+        this.log(`  ${id}: <${name}> ${memory} ${bits} ${clock}`);
+    } else if (miner.HAS_OPENCL) {
+      this.log('OpenCL Devices:');
       for (const {id, name, memory, bits, clock} of miner.getDevices())
         this.log(`  ${id}: <${name}> ${memory} ${bits} ${clock}`);
     } else {
