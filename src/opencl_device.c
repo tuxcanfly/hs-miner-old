@@ -14,7 +14,7 @@ hs_opencl_device_count() {
   cl_platform_id *platformids;
   cl_int ret;
 
-  uint32_t total = 0;
+  cl_uint total = 0;
 
   ret = clGetPlatformIDs(0, NULL, &platformCount);
   if (ret != CL_SUCCESS || !platformCount) {
@@ -29,7 +29,7 @@ hs_opencl_device_count() {
     return 0;
   }
 
-  int i;
+  cl_uint i;
   for (i = 0; i < platformCount; i++) {
     ret = clGetDeviceIDs(platformids[i], CL_DEVICE_TYPE_GPU, 0, NULL, &deviceCount);
     if (ret != CL_SUCCESS) {
@@ -50,11 +50,13 @@ hs_opencl_device_info(uint32_t device, hs_device_info_t *info) {
   cl_device_id *deviceids;
   cl_int ret;
 
+  // Get the platform count
   ret = clGetPlatformIDs(0, NULL, &platformCount);
   if (ret != CL_SUCCESS || !platformCount) {
     return false;
   }
 
+  // Get the platform ids
   platformids = (cl_platform_id *)malloc(sizeof(cl_platform_id) * platformCount);
 
   ret = clGetPlatformIDs(platformCount, platformids, NULL);
@@ -63,49 +65,54 @@ hs_opencl_device_info(uint32_t device, hs_device_info_t *info) {
     return false;
   }
 
-  // Iterate through each platform and print its devices
-  int i,j;
+  cl_uint i;
+  cl_uint total = 0;
+  // For each platform, get the devices on it
   for (i = 0; i < platformCount; i++) {
-    char str[80];
-    // Print platform info.
-    ret = clGetPlatformInfo(platformids[i], CL_PLATFORM_NAME, 80, str, NULL);
-    if (ret != CL_SUCCESS) {
-      printf("\tError while fetching platform info.\n");
-      continue;
-    }
-    printf("Devices on platform %d, \"%s\":\n", i, str);
     ret = clGetDeviceIDs(platformids[i], CL_DEVICE_TYPE_GPU, 0, NULL, &deviceCount);
-    if (ret != CL_SUCCESS) {
-      printf("\tError while fetching device ids.\n");
-        continue;
-    }
-    if (!deviceCount) {
-      printf("\tNo devices found for this platform.\n");
+
+    // Why check deviceCount here?
+    if (ret != CL_SUCCESS || !deviceCount) {
       continue;
     }
+
     deviceids = (cl_device_id *)malloc(sizeof(cl_device_id) * deviceCount);
 
+    // deviceCount is number of devices on that platform
     ret = clGetDeviceIDs(platformids[i], CL_DEVICE_TYPE_GPU, deviceCount, deviceids, NULL);
+
     if (ret != CL_SUCCESS) {
-      printf("\tError while getting device ids.\n");
       free(deviceids);
       continue;
     }
 
-    for (j = 0; j < deviceCount; j++) {
-      // Print platform info.
-      ret = clGetDeviceInfo(deviceids[j], CL_DEVICE_NAME, 80, str, NULL);
-      if (ret != CL_SUCCESS) {
-        printf("\tError while getting device info.\n");
-        free(deviceids);
-        continue;
-      }
-      printf("\tDevice %d: %s\n", j, str);
-    }
-    free(deviceids);
-  }
-  free(platformids);
-  return 0;
+    ret = clGetDeviceIDs(platformids[i], CL_DEVICE_TYPE_GPU, deviceCount, deviceids, NULL);
 
-  return 0;
+    if (total + deviceCount > device) {
+      // index in the current device ids list
+      int index = device - total;
+
+      ret = clGetDeviceInfo(deviceids[index], CL_DEVICE_NAME, sizeof(info->name), info->name, NULL);
+
+      cl_ulong mem;
+      //ret = clGetDeviceInfo(deviceids[index], CL_DEVICE_GLOBAL_MEM_SIZE, sizeof(cl_ulong), (cl_ulong*)info->memory, NULL);
+      ret = clGetDeviceInfo(deviceids[index], CL_DEVICE_GLOBAL_MEM_SIZE, sizeof(mem), &mem, NULL);
+      info->memory= (uint64_t)mem;
+
+      // TODO: figure out how to query for memory bus size and
+      // set at info->bits. I can't seem to find a good api for it,
+      // just set to 0 for now.
+      info->bits = 0;
+
+      cl_uint freq;
+      ret = clGetDeviceInfo(deviceids[index], CL_DEVICE_MAX_CLOCK_FREQUENCY, sizeof(freq), &freq, NULL);
+      info->clock_rate = (uint32_t)freq;
+
+      return true;
+    }
+
+    total += deviceCount;
+  }
+
+  return false;
 }
