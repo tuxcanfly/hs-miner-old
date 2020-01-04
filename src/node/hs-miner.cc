@@ -19,7 +19,7 @@
 #include "../blake2.h"
 #include "../sha3.h"
 #include "../common.h"
-#include "../device.h"
+#include "../opencl_device.h"
 #include "../error.h"
 
 typedef std::unordered_map<uint32_t, hs_options_t *> job_map_t;
@@ -178,6 +178,12 @@ get_miner_func(const char *backend, bool *is_cuda) {
     if (is_cuda)
       *is_cuda = true;
     return hs_cuda_run;
+  }
+#endif
+
+#ifdef HS_HAS_OPENCL
+  if (strcmp(backend, "opencl") == 0) {
+    return NULL;
   }
 #endif
 
@@ -661,9 +667,9 @@ NAN_METHOD(has_device) {
 #endif
 }
 
-NAN_METHOD(get_device_count) {
+NAN_METHOD(get_cuda_device_count) {
   if (info.Length() != 0)
-    return Nan::ThrowError("get_device_count() requires no arguments.");
+    return Nan::ThrowError("get_cuda_device_count() requires no arguments.");
 
 #ifdef HS_HAS_CUDA
   info.GetReturnValue().Set(Nan::New<v8::Uint32>(hs_cuda_device_count()));
@@ -672,48 +678,70 @@ NAN_METHOD(get_device_count) {
 #endif
 }
 
-NAN_METHOD(get_devices) {
+NAN_METHOD(get_opencl_device_count) {
   if (info.Length() != 0)
-    return Nan::ThrowError("get_devices() requires no arguments.");
+    return Nan::ThrowError("get_opencl_device_count() requires no arguments.");
+
+#ifdef HS_HAS_OPENCL
+  info.GetReturnValue().Set(Nan::New<v8::Uint32>(hs_opencl_device_count()));
+#else
+  info.GetReturnValue().Set(Nan::New<v8::Uint32>(0));
+#endif
+}
+
+NAN_METHOD(get_cuda_devices) {
+  if (info.Length() != 0)
+    return Nan::ThrowError("get_cuda_devices() requires no arguments.");
 
   v8::Local<v8::Array> rets = Nan::New<v8::Array>();
 
 #ifdef HS_HAS_CUDA
   uint32_t cuda_count = hs_cuda_device_count();
 
-  hs_device_info_t dev;
+  hs_device_info_t cuda_dev;
 
   for (uint32_t i = 0; i < cuda_count; i++) {
-    if (!hs_device_info(i, &dev))
+    if (!hs_cuda_device_info(i, &cuda_dev))
       break;
 
     v8::Local<v8::Array> ret = Nan::New<v8::Array>();
 
-    Nan::Set(ret, 0, Nan::New<v8::String>(dev.name).ToLocalChecked());
-    Nan::Set(ret, 1, Nan::New<v8::Number>(dev.memory));
-    Nan::Set(ret, 2, Nan::New<v8::Uint32>(dev.bits));
-    Nan::Set(ret, 3, Nan::New<v8::Uint32>(dev.clock_rate));
+    Nan::Set(ret, 0, Nan::New<v8::String>(cuda_dev.name).ToLocalChecked());
+    Nan::Set(ret, 1, Nan::New<v8::Number>(cuda_dev.memory));
+    Nan::Set(ret, 2, Nan::New<v8::Uint32>(cuda_dev.bits));
+    Nan::Set(ret, 3, Nan::New<v8::Uint32>(cuda_dev.clock_rate));
+    Nan::Set(ret, 4, Nan::New<v8::String>("cuda").ToLocalChecked());
 
     Nan::Set(rets, i, ret);
   }
 #endif
 
+  info.GetReturnValue().Set(rets);
+}
+
+NAN_METHOD(get_opencl_devices) {
+  if (info.Length() != 0)
+    return Nan::ThrowError("get_opencl_devices() requires no arguments.");
+
+  v8::Local<v8::Array> rets = Nan::New<v8::Array>();
+
 #ifdef HS_HAS_OPENCL
   uint32_t ocl_count = hs_opencl_device_count();
-  printf("count: %u\n", ocl_count);
 
-  hs_device_info_t dev;
+  hs_device_info_t opencl_dev;
 
   for (uint32_t i = 0; i < ocl_count; i++) {
-    if (!hs_cuda_device_info(i, &dev))
+    if (!hs_opencl_device_info(i, &opencl_dev)) {
       break;
+    }
 
     v8::Local<v8::Array> ret = Nan::New<v8::Array>();
 
-    Nan::Set(ret, 0, Nan::New<v8::String>(dev.name).ToLocalChecked());
-    Nan::Set(ret, 1, Nan::New<v8::Number>(dev.memory));
-    Nan::Set(ret, 2, Nan::New<v8::Uint32>(dev.bits));
-    Nan::Set(ret, 3, Nan::New<v8::Uint32>(dev.clock_rate));
+    Nan::Set(ret, 0, Nan::New<v8::String>(opencl_dev.name).ToLocalChecked());
+    Nan::Set(ret, 1, Nan::New<v8::Number>(opencl_dev.memory));
+    Nan::Set(ret, 2, Nan::New<v8::Uint32>(opencl_dev.bits));
+    Nan::Set(ret, 3, Nan::New<v8::Uint32>(opencl_dev.clock_rate));
+    Nan::Set(ret, 4, Nan::New<v8::String>("opencl").ToLocalChecked());
 
     Nan::Set(rets, i, ret);
   }
@@ -737,8 +765,10 @@ NAN_MODULE_INIT(init) {
   Nan::Export(target, "hasCUDA", has_cuda);
   Nan::Export(target, "hasOpenCL", has_opencl);
   Nan::Export(target, "hasDevice", has_device);
-  Nan::Export(target, "getDeviceCount", get_device_count);
-  Nan::Export(target, "getDevices", get_devices);
+  Nan::Export(target, "getCUDADeviceCount", get_cuda_device_count);
+  Nan::Export(target, "getOpenCLDeviceCount", get_opencl_device_count);
+  Nan::Export(target, "getCUDADevices", get_cuda_devices);
+  Nan::Export(target, "getOpenCLDevices", get_opencl_devices);
 }
 
 #if NODE_MAJOR_VERSION >= 10
