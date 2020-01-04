@@ -14,7 +14,7 @@
       "./src/sha3.c",
       "./src/header.c",
       "./src/verify.cc",
-      "./src/device.c",
+      "./src/opencl_device.c",
       "./src/simple.cc",
       "./src/utils.c"
     ],
