@@ -64,10 +64,10 @@ hs_simple_run(
 
 #ifdef HS_HAS_CUDA
 uint32_t
-hs_device_count(void);
+hs_cuda_device_count(void);
 
 bool
-hs_device_info(uint32_t device, hs_device_info_t *info);
+hs_cuda_device_info(uint32_t device, hs_device_info_t *info);
 
 int32_t
 hs_cuda_run(
