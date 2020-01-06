@@ -1,10 +1,12 @@
 #include <stdio.h>
 
+#ifdef HS_HAS_OPENCL
+
 #ifdef __APPLE__
 #include <OpenCL/opencl.h>
 #else
 #include <CL/cl.h>
-#endif
+#endif // __APPLE__
 
 #include "common.h"
 
@@ -116,3 +118,5 @@ hs_opencl_device_info(uint32_t device, hs_device_info_t *info) {
 
   return false;
 }
+
+#endif // HS_HAS_OPENCL

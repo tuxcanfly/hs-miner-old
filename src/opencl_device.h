@@ -2,9 +2,11 @@
 
 #include "common.h"
 
+#ifdef HS_HAS_OPENCL
+
 #ifdef __cplusplus
 extern "C" {
-#endif
+#endif // __cplusplus
 
 uint32_t
 hs_opencl_device_count();
@@ -14,4 +16,6 @@ hs_opencl_device_info(uint32_t device, hs_device_info_t *info);
 
 #ifdef __cplusplus
 }
-#endif
+#endif // __cplusplus
+
+#endif // HS_HAS_OPENCL
