@@ -747,6 +747,7 @@ int32_t hs_cuda_run(hs_options_t *options, uint32_t *result, bool *match)
     // bits        - 4 bytes
     // total       - 128 bytes
 
+
     cudaMemcpyToSymbol(_pre_header, options->header, 96);
     cudaMemcpyToSymbol(_sub_header, options->header + 128, 128);
     cudaMemcpyToSymbol(_target, options->target, 32);
@@ -756,7 +757,27 @@ int32_t hs_cuda_run(hs_options_t *options, uint32_t *result, bool *match)
     // Pointers to the subheader and mask hash
     hs_commit_hash(options->header + 128, options->header + 96);
 
+    // TODO: create ifdefs
+
+    cudaEvent_t start, stop;
+    float time;
+
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    cudaEventRecord(start, 0);
+
     kernel_hs_hash<<< options->grids, options->blocks >>>(out_nonce, out_match, options->threads);
+
+    cudaEventRecord(stop, 0);
+    cudaEventSynchronize(stop);
+
+    cudaEventElapsedTime(&time, start, stop);
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+
+    printf("kernel_hs_hash elasped: %f", time);
+
     cudaMemcpy(result, out_nonce, sizeof(uint32_t), cudaMemcpyDeviceToHost);
     cudaMemcpy(match, out_match, sizeof(bool), cudaMemcpyDeviceToHost);
     cudaError_t error = cudaGetLastError();
