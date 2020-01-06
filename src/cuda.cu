@@ -730,6 +730,7 @@ int32_t hs_cuda_run(hs_options_t *options, uint32_t *result, bool *match)
     uint16_t threads = 382;
     bool zero = false; // TODO; this is really stupid
 
+    cudaSetDevice(options->device);
     cudaMalloc(&out_nonce, sizeof(uint32_t));
     cudaMalloc(&out_match, sizeof(bool));
     cudaMemcpy(out_match, &zero, sizeof(bool), cudaMemcpyHostToDevice);
