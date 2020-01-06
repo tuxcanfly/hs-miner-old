@@ -73,7 +73,6 @@ hs_opencl_device_info(uint32_t device, hs_device_info_t *info) {
   for (i = 0; i < platformCount; i++) {
     ret = clGetDeviceIDs(platformids[i], CL_DEVICE_TYPE_GPU, 0, NULL, &deviceCount);
 
-    // Why check deviceCount here?
     if (ret != CL_SUCCESS || !deviceCount) {
       continue;
     }
@@ -97,9 +96,8 @@ hs_opencl_device_info(uint32_t device, hs_device_info_t *info) {
       ret = clGetDeviceInfo(deviceids[index], CL_DEVICE_NAME, sizeof(info->name), info->name, NULL);
 
       cl_ulong mem;
-      //ret = clGetDeviceInfo(deviceids[index], CL_DEVICE_GLOBAL_MEM_SIZE, sizeof(cl_ulong), (cl_ulong*)info->memory, NULL);
       ret = clGetDeviceInfo(deviceids[index], CL_DEVICE_GLOBAL_MEM_SIZE, sizeof(mem), &mem, NULL);
-      info->memory= (uint64_t)mem;
+      info->memory = (uint64_t)mem;
 
       // TODO: figure out how to query for memory bus size and
       // set at info->bits. I can't seem to find a good api for it,
