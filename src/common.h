@@ -46,14 +46,12 @@ typedef int32_t (*hs_miner_func)(
   bool *match
 );
 
-#if defined(HS_HAS_CUDA) || defined(HS_HAS_OPENCL)
 typedef struct hs_device_info_s {
   char name[513];
   uint64_t memory;
   uint32_t bits;
   uint32_t clock_rate;
 } hs_device_info_t;
-#endif
 
 int32_t
 hs_simple_run(

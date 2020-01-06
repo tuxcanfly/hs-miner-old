@@ -1,7 +1,8 @@
 #include <stdint.h>
+
 #include "common.h"
 
-#if defined(__cplusplus)
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -11,6 +12,6 @@ hs_opencl_device_count();
 bool
 hs_opencl_device_info(uint32_t device, hs_device_info_t *info);
 
-#if defined(__cplusplus)
+#ifdef __cplusplus
 }
 #endif
