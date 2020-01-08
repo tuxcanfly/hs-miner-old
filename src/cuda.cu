@@ -602,15 +602,19 @@ __global__ void kernel_keccak_hash(BYTE* indata, WORD inlen, BYTE* outdata, WORD
  */
 
 // Global memory is underscore prefixed
-__constant__ uint8_t _pre_header[96];
-__constant__ uint8_t _sub_header[128];
-__constant__ uint8_t _target[32];
-__constant__ uint8_t _padding[32];
-__constant__ uint8_t _commit_hash[32];
+// TODO: check if align necessary? already aligned if size is multiple of 16
+// TODO: align - check benchmarks
+__constant__ uint8_t __align__(16) _pre_header[96];
+__constant__ uint8_t __align__(16) _sub_header[128];
+__constant__ uint8_t __align__(16) _target[32];
+__constant__ uint8_t __align__(16) _padding[32];
+__constant__ uint8_t __align__(16) _commit_hash[32];
 
 __device__ int cuda_memcmp(const void *s1, const void *s2, size_t n) {
 	const unsigned char *us1 = (const unsigned char *) s1;
 	const unsigned char *us2 = (const unsigned char *) s2;
+// TODO: pragma - check benchmarks
+#pragma unroll
 	while (n-- != 0) {
 		if (*us1 != *us2) {
 			return (*us1 < *us2) ? -1 : +1;
@@ -632,6 +636,24 @@ __global__ void kernel_hs_hash(uint32_t *out_nonce, bool *out_match, unsigned in
     CUDA_BLAKE2B_CTX b_ctx;
     CUDA_KECCAK_CTX s_ctx;
 
+    // TODO: shared memory - check benchmarks
+    __shared__ uint8_t pre_header[96];
+    __shared__ uint8_t target[32];
+    __shared__ uint8_t padding[32];
+    __shared__ uint8_t commit_hash[32];
+
+    for (int i=0; i < 96; i++) {
+        pre_header[i] = _pre_header[i];
+    }
+
+    for (int i=0; i < 32; i++) {
+        target[i] = _target[i];
+        padding[i] = _padding[i];
+        commit_hash[i] = _commit_hash[i];
+    }
+
+    __syncthreads();
+
     uint8_t hash[32];
     uint8_t left[64];
     uint8_t right[32];
@@ -643,8 +665,8 @@ __global__ void kernel_hs_hash(uint32_t *out_nonce, bool *out_match, unsigned in
     // Create the share using the nonce,
     // pre_header and commit_hash.
     memcpy(share, &nonce, 4);
-    memcpy(share + 4, _pre_header + 4, 92);
-    memcpy(share + 96, _commit_hash, 32);
+    memcpy(share + 4, pre_header + 4, 92);
+    memcpy(share + 96, commit_hash, 32);
 
     // Generate left by hashing the share
     // with blake2b-512.
@@ -657,7 +679,7 @@ __global__ void kernel_hs_hash(uint32_t *out_nonce, bool *out_match, unsigned in
     // sha3-256.
     cuda_keccak_init(&s_ctx, 256);
     cuda_keccak_update(&s_ctx, share, 128);
-    cuda_keccak_update(&s_ctx, _padding, 8);
+    cuda_keccak_update(&s_ctx, padding, 8);
     cuda_keccak_final(&s_ctx, right);
 
     // Generate share hash by hashing together
@@ -665,14 +687,14 @@ __global__ void kernel_hs_hash(uint32_t *out_nonce, bool *out_match, unsigned in
     // right with blake2b-256.
     cuda_blake2b_init(&b_ctx, NULL, 0, 256);
     cuda_blake2b_update(&b_ctx, left, 64);
-    cuda_blake2b_update(&b_ctx, _padding, 32);
+    cuda_blake2b_update(&b_ctx, padding, 32);
     cuda_blake2b_update(&b_ctx, right, 32);
     cuda_blake2b_final(&b_ctx, hash);
 
     // Do a bytewise comparison to see if the
     // hash satisfies the target. This could be
     // either the network target or the pool target.
-    if (cuda_memcmp(hash, _target, 32) <= 0) {
+    if (cuda_memcmp(hash, target, 32) <= 0) {
         *out_nonce = thread;
         *out_match = true;
         return;
@@ -726,8 +748,9 @@ int32_t hs_cuda_run(hs_options_t *options, uint32_t *result, bool *match)
     bool *out_match;
 
     cudaSetDevice(options->device);
-    cudaMalloc(&out_nonce, sizeof(uint32_t));
-    cudaMalloc(&out_match, sizeof(bool));
+    // TODO: pinned memory - check benchmarks
+    cudaMallocHost(&out_nonce, sizeof(uint32_t));
+    cudaMallocHost(&out_match, sizeof(bool));
     cudaMemset(out_match, 0, sizeof(bool));
 
     // preheader + mask hash
@@ -766,8 +789,8 @@ int32_t hs_cuda_run(hs_options_t *options, uint32_t *result, bool *match)
         // TOOD: cudaFree?
         return HS_ENOSOLUTION;
     }
-    cudaFree(out_nonce);
-    cudaFree(out_match);
+    cudaFreeHost(out_nonce);
+    cudaFreeHost(out_match);
 
     if (match)
         return HS_SUCCESS;
