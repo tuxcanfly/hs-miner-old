@@ -1,20 +1,16 @@
 #!/bin/bash
 
-MAIN_BITS=29
-
-TESTNET_BITS=23
-
-REGTEST_BITS=7
-
-SIMNET_BITS=15
-
 NETWORK=$(test -n "$HS_NETWORK" && echo "$HS_NETWORK" || echo 'testnet')
 
 SO=so
+OCL_PREFIX=/usr/include/CL
 
 if uname | grep -i 'darwin' > /dev/null; then
   SO=dylib
+  OCL_PREFIX=/usr/include/OpenCL
 fi
+
+OCL_LIB="$OCL_PREFIX/cl.h"
 
 if test -n "$2"; then
   NETWORK=$2
@@ -67,6 +63,13 @@ case "$1" in
   nvcc)
     echo "$NVCC"
   ;;
+  ocl_has)
+    if test ! -f "$OCL_LIB"; then
+      echo 0
+    else
+      echo 1
+    fi
+  ;;
   endian)
     python -c \
       'from __future__ import print_function; import sys; print(sys.byteorder)'
@@ -81,26 +84,6 @@ case "$1" in
       ;;
     esac
     echo "$NETWORK"
-  ;;
-  bits)
-    case "$NETWORK" in
-      main)
-        echo "$MAIN_BITS"
-      ;;
-      testnet)
-        echo "$TESTNET_BITS"
-      ;;
-      regtest)
-        echo "$REGTEST_BITS"
-      ;;
-      simnet)
-        echo "$SIMNET_BITS"
-      ;;
-      *)
-        echo 'Bad network.' 2>& 1
-        exit 1
-      ;;
-    esac
   ;;
   *)
     echo 'Bad action.' 2>& 1
